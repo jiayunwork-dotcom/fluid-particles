@@ -36,7 +36,7 @@ export class SPHSystem {
     this.h = simParams.smoothingRadius;
     this.spatialHash = new SpatialHash(this.h);
     this.calculateKernelCoefficients();
-    this.neighborArray = new Array(500);
+    this.neighborArray = new Array(5000);
     this.initializeParticles(particleCount);
   }
 
@@ -243,17 +243,22 @@ export class SPHSystem {
     const stiffness = this.materialParams.stiffness;
     const poly6Coeff = this.poly6Coeff;
     const particles = this.particles;
+    const particleCount = particles.length;
     const neighbors = this.neighborArray;
     const invRestDensity = 1 / restDensity;
 
-    for (let i = 0; i < particles.length; i++) {
+    for (let i = 0; i < particleCount; i++) {
       const pi = particles[i];
       let density = 0;
-      const neighborCount = this.spatialHash.getNeighborsFast(pi.position, neighbors);
+      let neighborCount = this.spatialHash.getNeighborsFast(pi.position, neighbors);
       const pxi = pi.position.x, pyi = pi.position.y;
+
+      if (neighborCount > neighbors.length) neighborCount = neighbors.length;
 
       for (let j = 0; j < neighborCount; j++) {
         const idx = neighbors[j];
+        if (idx < 0 || idx >= particleCount) continue;
+        
         const pj = particles[idx];
         const dx = pxi - pj.position.x;
         const dy = pyi - pj.position.y;
@@ -284,18 +289,22 @@ export class SPHSystem {
     const spikyGradCoeff = this.spikyGradCoeff;
     const viscLapCoeff = this.viscLapCoeff;
     const particles = this.particles;
+    const particleCount = particles.length;
     const forceFields = this.forceFields;
     const neighbors = this.neighborArray;
 
-    for (let i = 0; i < particles.length; i++) {
+    for (let i = 0; i < particleCount; i++) {
       const pi = particles[i];
       let fx = 0, fy = 0;
-      const neighborCount = this.spatialHash.getNeighborsFast(pi.position, neighbors);
+      let neighborCount = this.spatialHash.getNeighborsFast(pi.position, neighbors);
       const pxi = pi.position.x, pyi = pi.position.y;
+
+      if (neighborCount > neighbors.length) neighborCount = neighbors.length;
 
       for (let j = 0; j < neighborCount; j++) {
         const idx = neighbors[j];
         if (i === idx) continue;
+        if (idx < 0 || idx >= particleCount) continue;
         
         const pj = particles[idx];
         const dx = pxi - pj.position.x;
@@ -329,7 +338,6 @@ export class SPHSystem {
       this.applyForceFieldsFast();
     }
     
-    const particleCount = this.particles.length;
     if (this.materialParams.surfaceTension > 0 && particleCount <= 6000) {
       this.applySurfaceTensionFast();
     }
@@ -627,18 +635,22 @@ export class SPHSystem {
     const spikyGradCoeff = this.spikyGradCoeff;
     const viscLapCoeff = this.viscLapCoeff;
     const particles = this.particles;
+    const particleCount = particles.length;
     const neighbors = this.neighborArray;
     
-    for (let i = 0; i < particles.length; i++) {
+    for (let i = 0; i < particleCount; i++) {
       const pi = particles[i];
-      const neighborCount = this.spatialHash.getNeighborsFast(pi.position, neighbors);
+      let neighborCount = this.spatialHash.getNeighborsFast(pi.position, neighbors);
       let cgx = 0, cgy = 0;
       let colorLaplacian = 0;
       const pxi = pi.position.x, pyi = pi.position.y;
+
+      if (neighborCount > neighbors.length) neighborCount = neighbors.length;
       
       for (let j = 0; j < neighborCount; j++) {
         const idx = neighbors[j];
         if (i === idx) continue;
+        if (idx < 0 || idx >= particleCount) continue;
         
         const pj = particles[idx];
         const dx = pxi - pj.position.x;

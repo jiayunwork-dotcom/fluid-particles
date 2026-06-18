@@ -100,12 +100,8 @@ class FluidSimulationApp {
     this.renderer.render(particles, forceFields, obstacles);
     
     if (this.uiController.isRecordingState()) {
-      this.recordFrameCounter++;
-      if (this.recordFrameCounter >= 2) {
-        this.recordFrameCounter = 0;
-        const frame = this.renderer.captureFrame();
-        this.uiController.addRecordedFrame(frame);
-      }
+      const frame = this.renderer.captureFrame();
+      this.uiController.addRecordedFrame(frame);
     }
     
     this.updateFPS(dt);

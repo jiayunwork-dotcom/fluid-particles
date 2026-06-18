@@ -378,7 +378,7 @@ export class Renderer {
     
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.depth);
     gl.viewport(0, 0, width, height);
-    gl.clearColor(0, 0, 0, 1);
+    gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     
     const depthProgram = this.programs.depth;
@@ -395,7 +395,7 @@ export class Renderer {
     gl.vertexAttribPointer(dPosLoc, 2, gl.FLOAT, false, 0, 0);
     
     gl.uniform2f(dResLoc, width, height);
-    gl.uniform1f(dRadiusLoc, this.particleSize * 2.2);
+    gl.uniform1f(dRadiusLoc, this.particleSize * 2.8);
     gl.uniform2f(dViewOffsetLoc, this.viewOffset.x, this.viewOffset.y);
     gl.uniform1f(dViewScaleLoc, this.viewScale);
     
@@ -413,7 +413,7 @@ export class Renderer {
     
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.normal);
     gl.viewport(0, 0, width, height);
-    gl.clearColor(0, 0, 0, 1);
+    gl.clearColor(0.5, 0.5, 1.0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     
     const normalProgram = this.programs.normal;
@@ -489,7 +489,7 @@ export class Renderer {
     
     gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO);
     gl.viewport(0, 0, width, height);
-    gl.clearColor(0, 0, 0, 1);
+    gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     
     gl.useProgram(program);
@@ -845,21 +845,36 @@ export class Renderer {
 
   captureFrame(): ImageData {
     const gl = this.gl;
-    const width = this.canvas.width;
-    const height = this.canvas.height;
-    const pixels = new Uint8Array(width * height * 4);
+    const srcWidth = this.canvas.width;
+    const srcHeight = this.canvas.height;
     
-    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    const maxWidth = 640;
+    const scale = Math.min(1, maxWidth / srcWidth);
+    const dstWidth = Math.floor(srcWidth * scale);
+    const dstHeight = Math.floor(srcHeight * scale);
     
-    const flipped = new Uint8Array(width * height * 4);
-    for (let y = 0; y < height; y++) {
-      const srcRow = (height - 1 - y) * width * 4;
-      const dstRow = y * width * 4;
-      for (let x = 0; x < width * 4; x++) {
-        flipped[dstRow + x] = pixels[srcRow + x];
+    const srcPixels = new Uint8Array(srcWidth * srcHeight * 4);
+    gl.readPixels(0, 0, srcWidth, srcHeight, gl.RGBA, gl.UNSIGNED_BYTE, srcPixels);
+    
+    const dstData = new Uint8ClampedArray(dstWidth * dstHeight * 4);
+    const sx = srcWidth / dstWidth;
+    const sy = srcHeight / dstHeight;
+    
+    for (let y = 0; y < dstHeight; y++) {
+      const dstY = dstHeight - 1 - y;
+      const srcY = Math.floor(y * sy);
+      
+      for (let x = 0; x < dstWidth; x++) {
+        const srcX = Math.floor(x * sx);
+        const srcIdx = (srcY * srcWidth + srcX) * 4;
+        const dstIdx = (dstY * dstWidth + x) * 4;
+        dstData[dstIdx] = srcPixels[srcIdx];
+        dstData[dstIdx + 1] = srcPixels[srcIdx + 1];
+        dstData[dstIdx + 2] = srcPixels[srcIdx + 2];
+        dstData[dstIdx + 3] = srcPixels[srcIdx + 3];
       }
     }
     
-    return new ImageData(new Uint8ClampedArray(flipped), width, height);
+    return new ImageData(dstData, dstWidth, dstHeight);
   }
 }

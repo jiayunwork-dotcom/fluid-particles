@@ -102,7 +102,8 @@ export const depthFS = `
     if (dist > 0.5) discard;
     
     float depth = 1.0 - smoothstep(0.0, 0.5, dist);
-    depth = pow(depth, 1.5);
+    depth = pow(depth, 0.8);
+    depth *= 0.9;
     gl_FragColor = vec4(depth, depth, depth, depth);
   }
 `;
@@ -215,12 +216,8 @@ export const fluidShadeFS = `
   
   void main() {
     vec4 normalData = texture2D(u_normalTexture, v_texCoord);
-    vec3 normal = normalData.rgb * 2.0 - 1.0;
+    vec3 normal = normalize(normalData.rgb * 2.0 - 1.0);
     float depth = normalData.a;
-    
-    if (depth < 0.05) {
-      discard;
-    }
     
     vec3 viewDir = vec3(0.0, 0.0, 1.0);
     vec3 lightDir = normalize(u_lightDir);
@@ -228,18 +225,24 @@ export const fluidShadeFS = `
     
     float diffuse = max(dot(normal, lightDir), 0.0);
     
-    float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), u_fresnelPower);
+    float nv = max(dot(normal, viewDir), 0.0);
+    float fresnel = pow(1.0 - nv, u_fresnelPower);
     
-    float specular = pow(max(dot(normal, halfDir), 0.0), 64.0);
+    float specular = pow(max(dot(normal, halfDir), 0.0), 32.0);
     
-    vec3 ambient = u_baseColor * 0.4;
-    vec3 diffuseColor = u_baseColor * diffuse * 0.8;
-    vec3 fresnelColor = u_envColor * fresnel;
-    vec3 specularColor = vec3(1.0) * specular * 0.6;
+    vec3 ambient = u_baseColor * 0.6;
+    vec3 diffuseColor = u_baseColor * diffuse * 1.0;
+    vec3 fresnelColor = u_envColor * fresnel * 1.5;
+    vec3 specularColor = vec3(1.0, 0.95, 0.85) * specular * 1.0;
     
     vec3 finalColor = ambient + diffuseColor + fresnelColor + specularColor;
     
-    float alpha = smoothstep(0.05, 0.3, depth);
+    float visible = smoothstep(0.0, 0.015, depth);
+    float alpha = clamp(visible + depth, 0.0, 1.0);
+    
+    if (alpha < 0.01) {
+      discard;
+    }
     
     gl_FragColor = vec4(finalColor, alpha);
   }

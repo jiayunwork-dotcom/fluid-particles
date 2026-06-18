@@ -30,8 +30,8 @@ export class UIController {
   
   private isPaused: boolean = false;
   private isRecording: boolean = false;
-  private recordFrames: number = 120;
-  private recordFps: number = 30;
+  private recordFrames: number = 45;
+  private recordFps: number = 15;
   private recordedFrames: ImageData[] = [];
   
   private forceStrength: number = 3000;
@@ -837,25 +837,33 @@ export class UIController {
     const indicator = document.getElementById('recordingIndicator');
     if (indicator) {
       indicator.style.display = 'flex';
+      indicator.textContent = '录制中 0%';
+      indicator.style.color = '#ff5555';
     }
   }
 
   private stopRecording(): void {
     this.isRecording = false;
     
-    const indicator = document.getElementById('recordingIndicator');
-    if (indicator) {
-      indicator.style.display = 'none';
-    }
-    
     if (this.recordedFrames.length > 0) {
       this.exportGif();
+    } else {
+      const indicator = document.getElementById('recordingIndicator');
+      if (indicator) {
+        indicator.style.display = 'none';
+      }
     }
   }
 
   addRecordedFrame(frame: ImageData): void {
     if (this.isRecording && this.recordedFrames.length < this.recordFrames) {
       this.recordedFrames.push(frame);
+      
+      const indicator = document.getElementById('recordingIndicator');
+      if (indicator) {
+        const percent = Math.round((this.recordedFrames.length / this.recordFrames) * 100);
+        indicator.textContent = `录制中 ${percent}%`;
+      }
     }
     
     if (this.recordedFrames.length >= this.recordFrames) {
