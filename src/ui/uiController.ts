@@ -7,12 +7,14 @@ import {
 import { vec2, vec2Add, vec2Sub, vec2Mul, vec2Div, vec2Normalize, vec2Length, generateId } from '../utils/math';
 import { encodeGif } from '../utils/gifEncoder';
 import { TrajectoryController } from './trajectoryController';
+import { AnalysisController } from './analysisController';
 
 export class UIController {
   private canvas: HTMLCanvasElement;
   private sphSystem: SPHSystem;
   private renderer: Renderer;
   private trajectoryController: TrajectoryController;
+  private analysisController: AnalysisController;
   
   private currentTool: ToolType = 'gravity';
   private isDrawing: boolean = false;
@@ -52,8 +54,11 @@ export class UIController {
     this.renderer = renderer;
     this.trajectoryController = new TrajectoryController(canvas, renderer, sphSystem);
     this.trajectoryController.setView(this.viewOffset, this.viewScale);
+    this.analysisController = new AnalysisController(canvas, sphSystem, renderer);
+    this.analysisController.setView(this.viewOffset, this.viewScale);
     
     this.bindEvents();
+    this.analysisController.setupUI();
   }
 
   setOnParamsChange(callback: () => void): void {
@@ -282,6 +287,7 @@ export class UIController {
     
     this.renderer.setView(this.viewOffset, this.viewScale);
     this.trajectoryController.setView(this.viewOffset, this.viewScale);
+    this.analysisController.setView(this.viewOffset, this.viewScale);
   }
 
   private onContextMenu(e: MouseEvent): void {
@@ -791,6 +797,7 @@ export class UIController {
     this.viewScale = 1;
     this.renderer.setView(this.viewOffset, this.viewScale);
     this.trajectoryController.setView(this.viewOffset, this.viewScale);
+    this.analysisController.setView(this.viewOffset, this.viewScale);
   }
 
   private applyMaterialPreset(material: string): void {
@@ -1082,5 +1089,9 @@ export class UIController {
 
   getTrajectoryController() {
     return this.trajectoryController;
+  }
+
+  getAnalysisController(): AnalysisController {
+    return this.analysisController;
   }
 }

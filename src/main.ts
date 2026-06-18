@@ -104,6 +104,9 @@ class FluidSimulationApp {
 
       this.renderer.render(particles, forceFields, obstacles);
 
+      const analysisController = this.uiController.getAnalysisController();
+      analysisController.update(dt);
+
       if (this.uiController.isRecordingState()) {
         const frame = this.renderer.captureFrame();
         this.uiController.addRecordedFrame(frame);

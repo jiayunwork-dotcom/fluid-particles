@@ -2,6 +2,7 @@ export const particleSpriteVS = `
   attribute vec2 a_position;
   attribute vec2 a_velocity;
   attribute float a_speed;
+  attribute float a_colorValue;
   
   uniform vec2 u_resolution;
   uniform float u_particleSize;
@@ -11,6 +12,7 @@ export const particleSpriteVS = `
   
   varying float v_speed;
   varying vec2 v_velocity;
+  varying float v_colorValue;
   
   void main() {
     vec2 pos = (a_position + u_viewOffset) * u_viewScale;
@@ -22,6 +24,7 @@ export const particleSpriteVS = `
     
     v_speed = a_speed;
     v_velocity = a_velocity;
+    v_colorValue = a_colorValue;
   }
 `;
 
@@ -30,10 +33,13 @@ export const particleSpriteFS = `
   
   varying float v_speed;
   varying vec2 v_velocity;
+  varying float v_colorValue;
   
   uniform float u_maxSpeed;
   uniform float u_alpha;
   uniform bool u_motionBlur;
+  uniform sampler2D u_colormap;
+  uniform bool u_useColormap;
   
   vec3 velocityToColor(float speed, float maxSpeed) {
     float t = clamp(speed / maxSpeed, 0.0, 1.0);
@@ -59,7 +65,14 @@ export const particleSpriteFS = `
     if (dist > 0.5) discard;
     
     float alpha = 1.0 - smoothstep(0.3, 0.5, dist);
-    vec3 color = velocityToColor(v_speed, u_maxSpeed);
+    
+    vec3 color;
+    if (u_useColormap) {
+      float t = clamp(v_colorValue, 0.0, 1.0);
+      color = texture2D(u_colormap, vec2(t, 0.5)).rgb;
+    } else {
+      color = velocityToColor(v_speed, u_maxSpeed);
+    }
     
     float glow = exp(-dist * 4.0) * 0.5;
     color += glow * color;

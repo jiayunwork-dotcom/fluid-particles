@@ -77,7 +77,8 @@ export class SPHSystem {
           prevVelocity: vec2(0, 0),
           density: 0,
           pressure: 0,
-          force: vec2(0, 0)
+          force: vec2(0, 0),
+          temperature: 20
         });
         
         placed++;
@@ -227,6 +228,52 @@ export class SPHSystem {
     this.integrate(dt);
     this.applyBoundaryConditions();
     this.handleEmittersAndSinks(dt);
+    this.updateTemperature(dt);
+  }
+
+  private updateTemperature(dt: number): void {
+    const h = this.h;
+    const hSq = h * h;
+    const particles = this.particles;
+    const particleCount = particles.length;
+    const neighbors = this.neighborArray;
+    const maxVel = this.simParams.maxVelocity;
+    const threshold = maxVel * 0.3;
+
+    for (let i = 0; i < particleCount; i++) {
+      const pi = particles[i];
+      let neighborCount = this.spatialHash.getNeighborsFast(pi.position, neighbors);
+      const pxi = pi.position.x, pyi = pi.position.y;
+      const vxi = pi.velocity.x, vyi = pi.velocity.y;
+
+      if (neighborCount > neighbors.length) neighborCount = neighbors.length;
+
+      let tempIncrease = 0;
+
+      for (let j = 0; j < neighborCount; j++) {
+        const idx = neighbors[j];
+        if (i === idx) continue;
+        if (idx < 0 || idx >= particleCount) continue;
+
+        const pj = particles[idx];
+        const dx = pxi - pj.position.x;
+        const dy = pyi - pj.position.y;
+        const rSq = dx * dx + dy * dy;
+
+        if (rSq < hSq && rSq > 0.0001) {
+          const dvx = vxi - pj.velocity.x;
+          const dvy = vyi - pj.velocity.y;
+          const relSpeed = Math.sqrt(dvx * dvx + dvy * dvy);
+
+          if (relSpeed > threshold) {
+            tempIncrease += 0.01 * relSpeed;
+          }
+        }
+      }
+
+      pi.temperature = (pi.temperature + tempIncrease) * 0.995;
+      pi.temperature = Math.max(0, Math.min(100, pi.temperature));
+    }
   }
 
   private buildSpatialHash(): void {
@@ -860,7 +907,8 @@ export class SPHSystem {
       prevVelocity: { ...emitter.velocity },
       density: this.materialParams.restDensity,
       pressure: 0,
-      force: vec2(0, 0)
+      force: vec2(0, 0),
+      temperature: 20
     });
   }
 

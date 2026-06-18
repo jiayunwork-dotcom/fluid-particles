@@ -374,3 +374,249 @@ html, body {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.analysis-panel {
+  position: absolute;
+  top: 90px;
+  left: 20px;
+  width: 280px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  background: rgba(20, 20, 40, 0.9);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  border: 1px solid rgba(100, 150, 255, 0.3);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  padding: 16px;
+  z-index: 100;
+}
+
+.analysis-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.analysis-panel::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.analysis-panel::-webkit-scrollbar-thumb {
+  background: rgba(100, 150, 255, 0.3);
+  border-radius: 3px;
+}
+
+.analysis-panel .subsection {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(100, 150, 255, 0.15);
+}
+
+.analysis-panel .subsection:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.subsection-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8ab4ff;
+  margin-bottom: 10px;
+  letter-spacing: 0.3px;
+}
+
+.coloring-modes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.coloring-mode-btn {
+  padding: 8px 6px;
+  background: rgba(60, 80, 140, 0.3);
+  border: 1px solid rgba(100, 150, 255, 0.2);
+  border-radius: 6px;
+  color: #c0d0ff;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.coloring-mode-btn:hover {
+  background: rgba(80, 120, 200, 0.5);
+}
+
+.coloring-mode-btn.active {
+  background: rgba(80, 140, 255, 0.6);
+  border-color: rgba(120, 180, 255, 0.8);
+  color: white;
+}
+
+.gradient-editor {
+  position: relative;
+  height: 36px;
+  margin: 8px 0 6px 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(100, 150, 255, 0.3);
+}
+
+.gradient-bar {
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.color-stop-handles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.color-stop-handle {
+  position: absolute;
+  top: -4px;
+  width: 14px;
+  height: 14px;
+  transform: translateX(-50%) rotate(45deg);
+  background: #1e1e3c;
+  border: 2px solid #ffffff;
+  border-bottom: none;
+  border-right: none;
+  cursor: grab;
+  pointer-events: auto;
+  z-index: 2;
+  border-radius: 3px 0 3px 0;
+}
+
+.color-stop-handle:active {
+  cursor: grabbing;
+}
+
+.hint-text {
+  font-size: 10px;
+  color: #7080a0;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.region-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.region-item {
+  background: rgba(60, 80, 140, 0.25);
+  border: 1px solid rgba(100, 150, 255, 0.25);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.region-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.region-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffdd44;
+}
+
+.region-close {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: rgba(200, 80, 80, 0.4);
+  color: #ffaaaa;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.region-close:hover {
+  background: rgba(220, 80, 80, 0.7);
+  color: #ffffff;
+}
+
+.region-stats {
+  font-size: 11px;
+  color: #a0b0d0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+}
+
+.region-stats div {
+  display: flex;
+  justify-content: space-between;
+}
+
+.region-stats span {
+  color: #7080a0;
+}
+
+.region-stats b {
+  color: #c0d8ff;
+  font-family: 'SF Mono', monospace;
+  font-weight: 500;
+}
+
+#histogramCanvas {
+  width: 100%;
+  height: 80px;
+  border-radius: 6px;
+  border: 1px solid rgba(100, 150, 255, 0.25);
+  display: block;
+  margin-bottom: 8px;
+}
+
+.histogram-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+  font-size: 11px;
+  color: #a0b0d0;
+}
+
+.histogram-stats div {
+  display: flex;
+  justify-content: space-between;
+}
+
+.histogram-stats span {
+  color: #7080a0;
+}
+
+.histogram-stats b {
+  color: #c0d8ff;
+  font-family: 'SF Mono', monospace;
+  font-weight: 500;
+}
+
+.analysis-region {
+  position: absolute;
+  border: 2px dashed #ffdd00;
+  background: rgba(255, 221, 0, 0.05);
+  pointer-events: none;
+  z-index: 50;
+  border-radius: 2px;
+}
+
+.analysis-region.temp {
+  border-color: #66ddff;
+  background: rgba(102, 221, 255, 0.08);
+  border-style: dashed;
+}

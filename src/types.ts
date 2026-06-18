@@ -11,6 +11,45 @@ export interface Particle {
   density: number;
   pressure: number;
   force: Vec2;
+  temperature: number;
+}
+
+export type ColoringMode = 'velocity' | 'density' | 'pressure' | 'temperature';
+
+export interface ColorStop {
+  position: number;
+  color: string;
+}
+
+export interface ColormapPreset {
+  name: string;
+  stops: ColorStop[];
+}
+
+export interface AnalysisRegion {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label: string;
+}
+
+export interface RegionStats {
+  particleCount: number;
+  avgVelocity: number;
+  maxVelocity: number;
+  avgDensity: number;
+  avgPressure: number;
+  avgTemperature: number;
+}
+
+export interface HistogramData {
+  bins: number[];
+  minValue: number;
+  maxValue: number;
+  mean: number;
+  stdDev: number;
 }
 
 export type ForceFieldType = 'gravity' | 'repel' | 'vortex' | 'flow' | 'brush' | 'obstacle' | 'emitter' | 'sink';

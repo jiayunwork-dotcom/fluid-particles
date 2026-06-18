@@ -206,6 +206,59 @@
     </div>
 
     <div id="selectionBox" class="selection-box" style="display: none;"></div>
+
+    <div id="analysisPanel" class="analysis-panel">
+      <div class="panel-section">
+        <div class="section-title">分析面板</div>
+        
+        <div class="subsection">
+          <div class="subsection-title">着色模式</div>
+          <div class="coloring-modes">
+            <button class="coloring-mode-btn active" data-mode="velocity">速度</button>
+            <button class="coloring-mode-btn" data-mode="density">密度</button>
+            <button class="coloring-mode-btn" data-mode="pressure">压力</button>
+            <button class="coloring-mode-btn" data-mode="temperature">温度</button>
+          </div>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">颜色映射</div>
+          <div class="control-row">
+            <label>预设</label>
+            <select id="colormapPreset"></select>
+          </div>
+          <div class="gradient-editor">
+            <div id="gradientBar" class="gradient-bar"></div>
+            <div id="colorStopHandles" class="color-stop-handles"></div>
+          </div>
+          <div class="hint-text">点击渐变条添加色标 · 拖拽调整位置 · 右键删除 · 点击编辑颜色</div>
+          <div class="control-row buttons">
+            <button id="btnSavePreset">💾 保存预设</button>
+            <button id="btnDeletePreset">🗑 删除预设</button>
+          </div>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">区域分析</div>
+          <div class="control-row buttons">
+            <button id="btnAddRegion">➕ 添加区域</button>
+            <button id="btnClearRegions">🗑 清空区域</button>
+          </div>
+          <div id="regionList" class="region-list"></div>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-title">属性直方图</div>
+          <canvas id="histogramCanvas" width="248" height="80"></canvas>
+          <div class="histogram-stats">
+            <div><span>最小:</span> <b id="histMinValue">0</b></div>
+            <div><span>最大:</span> <b id="histMaxValue">0</b></div>
+            <div><span>平均:</span> <b id="histMeanValue">0</b></div>
+            <div><span>标准差:</span> <b id="histStdValue">0</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="/src/main.ts"></script>

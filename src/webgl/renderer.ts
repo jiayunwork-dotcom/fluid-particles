@@ -1,4 +1,4 @@
-import { Particle, ForceField, Obstacle, Vec2, RenderMode, TrajectoryFrame } from '../types';
+import { Particle, ForceField, Obstacle, Vec2, RenderMode, TrajectoryFrame, ColoringMode, ColorStop, AnalysisRegion } from '../types';
 import { createProgramFromSources, createBuffer, createTexture, createFramebuffer, resizeCanvas } from './glUtils';
 import {
   particleSpriteVS, particleSpriteFS,
@@ -12,6 +12,15 @@ import {
   backgroundVS, backgroundFS
 } from '../shaders/shaders';
 import { vec2Length, vec2Add, vec2Sub, vec2Normalize, vec2Perp, generateId } from '../utils/math';
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16) / 255,
+    g: parseInt(result[2], 16) / 255,
+    b: parseInt(result[3], 16) / 255
+  } : { r: 0, g: 0, b: 0 };
+}
 
 export class Renderer {
   private gl: WebGLRenderingContext;
@@ -33,10 +42,19 @@ export class Renderer {
   private particlePositionData: Float32Array = new Float32Array(0);
   private particleVelocityData: Float32Array = new Float32Array(0);
   private particleSpeedData: Float32Array = new Float32Array(0);
+  private particleColorValueData: Float32Array = new Float32Array(0);
   private particlePositionBuffer: WebGLBuffer | null = null;
   private particleVelocityBuffer: WebGLBuffer | null = null;
   private particleSpeedBuffer: WebGLBuffer | null = null;
+  private particleColorValueBuffer: WebGLBuffer | null = null;
   private particleBufferSize: number = 0;
+  
+  private coloringMode: ColoringMode = 'velocity';
+  private useColormap: boolean = false;
+  private colormapTexture: WebGLTexture | null = null;
+  private colormapStops: ColorStop[] = [];
+  
+  private analysisRegions: AnalysisRegion[] = [];
   
   private quadPositions: Float32Array;
   private quadTexCoords: Float32Array;
@@ -97,11 +115,19 @@ export class Renderer {
     this.particlePositionData = new Float32Array(this.maxParticles * 2);
     this.particleVelocityData = new Float32Array(this.maxParticles * 2);
     this.particleSpeedData = new Float32Array(this.maxParticles);
+    this.particleColorValueData = new Float32Array(this.maxParticles);
     
     this.particlePositionBuffer = createBuffer(gl, this.particlePositionData, gl.DYNAMIC_DRAW);
     this.particleVelocityBuffer = createBuffer(gl, this.particleVelocityData, gl.DYNAMIC_DRAW);
     this.particleSpeedBuffer = createBuffer(gl, this.particleSpeedData, gl.DYNAMIC_DRAW);
+    this.particleColorValueBuffer = createBuffer(gl, this.particleColorValueData, gl.DYNAMIC_DRAW);
     this.particleBufferSize = this.maxParticles;
+    
+    this.colormapTexture = gl.createTexture();
+    this.updateColormapTexture([
+      { position: 0, color: '#0000ff' },
+      { position: 1, color: '#ff0000' }
+    ]);
     
     this.lineVertexData = new Float32Array(this.maxLines * 2 * 2);
     this.lineColorData = new Float32Array(this.maxLines * 2 * 4);
@@ -219,6 +245,79 @@ export class Renderer {
     this.maxSpeed = speed;
   }
 
+  setColoringMode(mode: ColoringMode): void {
+    this.coloringMode = mode;
+    this.useColormap = true;
+  }
+
+  getColoringMode(): ColoringMode {
+    return this.coloringMode;
+  }
+
+  updateColormapTexture(stops: ColorStop[]): void {
+    this.colormapStops = stops;
+    const gl = this.gl;
+    const textureSize = 256;
+    const pixels = new Uint8Array(textureSize * 4);
+
+    const sortedStops = [...stops].sort((a, b) => a.position - b.position);
+
+    for (let i = 0; i < textureSize; i++) {
+      const t = i / (textureSize - 1);
+      let r = 0, g = 0, b = 0;
+
+      if (sortedStops.length === 0) {
+        r = 128; g = 128; b = 128;
+      } else if (sortedStops.length === 1) {
+        const rgb = hexToRgb(sortedStops[0].color);
+        r = Math.round(rgb.r * 255);
+        g = Math.round(rgb.g * 255);
+        b = Math.round(rgb.b * 255);
+      } else {
+        if (t <= sortedStops[0].position) {
+          const rgb = hexToRgb(sortedStops[0].color);
+          r = Math.round(rgb.r * 255);
+          g = Math.round(rgb.g * 255);
+          b = Math.round(rgb.b * 255);
+        } else if (t >= sortedStops[sortedStops.length - 1].position) {
+          const rgb = hexToRgb(sortedStops[sortedStops.length - 1].color);
+          r = Math.round(rgb.r * 255);
+          g = Math.round(rgb.g * 255);
+          b = Math.round(rgb.b * 255);
+        } else {
+          for (let j = 0; j < sortedStops.length - 1; j++) {
+            if (t >= sortedStops[j].position && t <= sortedStops[j + 1].position) {
+              const range = sortedStops[j + 1].position - sortedStops[j].position;
+              const localT = range > 0 ? (t - sortedStops[j].position) / range : 0;
+              const rgb1 = hexToRgb(sortedStops[j].color);
+              const rgb2 = hexToRgb(sortedStops[j + 1].color);
+              r = Math.round((rgb1.r + (rgb2.r - rgb1.r) * localT) * 255);
+              g = Math.round((rgb1.g + (rgb2.g - rgb1.g) * localT) * 255);
+              b = Math.round((rgb1.b + (rgb2.b - rgb1.b) * localT) * 255);
+              break;
+            }
+          }
+        }
+      }
+
+      pixels[i * 4] = r;
+      pixels[i * 4 + 1] = g;
+      pixels[i * 4 + 2] = b;
+      pixels[i * 4 + 3] = 255;
+    }
+
+    gl.bindTexture(gl.TEXTURE_2D, this.colormapTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, textureSize, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  }
+
+  setAnalysisRegions(regions: AnalysisRegion[]): void {
+    this.analysisRegions = regions;
+  }
+
   setView(offset: Vec2, scale: number): void {
     this.viewOffset = offset;
     this.viewScale = scale;
@@ -269,6 +368,10 @@ export class Renderer {
     const posData = this.particlePositionData;
     const velData = this.particleVelocityData;
     const speedData = this.particleSpeedData;
+    const colorValueData = this.particleColorValueData;
+    
+    let minVal = Infinity, maxVal = -Infinity;
+    const values: number[] = [];
     
     for (let i = 0; i < count; i++) {
       const p = particles[i];
@@ -281,7 +384,36 @@ export class Renderer {
       posData[i * 2 + 1] = py;
       velData[i * 2] = vx;
       velData[i * 2 + 1] = vy;
-      speedData[i] = Math.sqrt(vx * vx + vy * vy);
+      const speed = Math.sqrt(vx * vx + vy * vy);
+      speedData[i] = speed;
+      
+      let val: number;
+      switch (this.coloringMode) {
+        case 'velocity':
+          val = speed;
+          break;
+        case 'density':
+          val = p.density;
+          break;
+        case 'pressure':
+          val = p.pressure;
+          break;
+        case 'temperature':
+          val = p.temperature;
+          break;
+        default:
+          val = speed;
+      }
+      values.push(val);
+      if (val < minVal) minVal = val;
+      if (val > maxVal) maxVal = val;
+    }
+    
+    const range = maxVal - minVal;
+    const invRange = range > 0.0001 ? 1 / range : 1;
+    
+    for (let i = 0; i < count; i++) {
+      colorValueData[i] = (values[i] - minVal) * invRange;
     }
     
     gl.bindBuffer(gl.ARRAY_BUFFER, this.particlePositionBuffer!);
@@ -292,6 +424,9 @@ export class Renderer {
     
     gl.bindBuffer(gl.ARRAY_BUFFER, this.particleSpeedBuffer!);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, speedData.subarray(0, count));
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.particleColorValueBuffer!);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, colorValueData.subarray(0, count));
     
     return count;
   }
@@ -331,6 +466,7 @@ export class Renderer {
     const posLoc = gl.getAttribLocation(program, 'a_position');
     const velLoc = gl.getAttribLocation(program, 'a_velocity');
     const speedLoc = gl.getAttribLocation(program, 'a_speed');
+    const colorValueLoc = gl.getAttribLocation(program, 'a_colorValue');
     
     const resLoc = gl.getUniformLocation(program, 'u_resolution');
     const sizeLoc = gl.getUniformLocation(program, 'u_particleSize');
@@ -339,6 +475,8 @@ export class Renderer {
     const motionBlurLoc = gl.getUniformLocation(program, 'u_motionBlur');
     const viewOffsetLoc = gl.getUniformLocation(program, 'u_viewOffset');
     const viewScaleLoc = gl.getUniformLocation(program, 'u_viewScale');
+    const colormapLoc = gl.getUniformLocation(program, 'u_colormap');
+    const useColormapLoc = gl.getUniformLocation(program, 'u_useColormap');
     
     gl.bindBuffer(gl.ARRAY_BUFFER, this.particlePositionBuffer);
     gl.enableVertexAttribArray(posLoc);
@@ -352,6 +490,10 @@ export class Renderer {
     gl.enableVertexAttribArray(speedLoc);
     gl.vertexAttribPointer(speedLoc, 1, gl.FLOAT, false, 0, 0);
     
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.particleColorValueBuffer);
+    gl.enableVertexAttribArray(colorValueLoc);
+    gl.vertexAttribPointer(colorValueLoc, 1, gl.FLOAT, false, 0, 0);
+    
     gl.uniform2f(resLoc, this.canvas.width, this.canvas.height);
     gl.uniform1f(sizeLoc, this.particleSize);
     gl.uniform1f(maxSpeedLoc, this.maxSpeed);
@@ -359,6 +501,13 @@ export class Renderer {
     gl.uniform1i(motionBlurLoc, this.motionBlur ? 1 : 0);
     gl.uniform2f(viewOffsetLoc, this.viewOffset.x, this.viewOffset.y);
     gl.uniform1f(viewScaleLoc, this.viewScale);
+    gl.uniform1i(useColormapLoc, this.useColormap ? 1 : 0);
+    
+    if (this.useColormap && this.colormapTexture) {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.colormapTexture);
+      gl.uniform1i(colormapLoc, 0);
+    }
     
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
@@ -366,6 +515,8 @@ export class Renderer {
     gl.drawArrays(gl.POINTS, 0, count);
     
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    
+    this.renderAnalysisRegions();
   }
 
   private renderFluid(): void {
@@ -521,6 +672,60 @@ export class Renderer {
 
   private beginLines(): void {
     this.lineCount = 0;
+  }
+
+  private renderAnalysisRegions(): void {
+    if (this.analysisRegions.length === 0) return;
+    
+    this.beginLines();
+    
+    for (const region of this.analysisRegions) {
+      const x = region.x;
+      const y = region.y;
+      const w = region.width;
+      const h = region.height;
+      
+      const r = 1.0, g = 0.9, b = 0.2, a = 0.9;
+      
+      this.addDashedLine(x, y, x + w, y, r, g, b, a);
+      this.addDashedLine(x + w, y, x + w, y + h, r, g, b, a);
+      this.addDashedLine(x + w, y + h, x, y + h, r, g, b, a);
+      this.addDashedLine(x, y + h, x, y, r, g, b, a);
+    }
+    
+    this.drawLines();
+  }
+
+  private addDashedLine(
+    x1: number, y1: number, x2: number, y2: number,
+    r: number, g: number, b: number, a: number,
+    dashLength: number = 8, gapLength: number = 6
+  ): void {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    if (length < 0.001) return;
+    
+    const dirX = dx / length;
+    const dirY = dy / length;
+    
+    let traveled = 0;
+    let drawing = true;
+    
+    while (traveled < length) {
+      const segLen = drawing ? Math.min(dashLength, length - traveled) : Math.min(gapLength, length - traveled);
+      const startX = x1 + dirX * traveled;
+      const startY = y1 + dirY * traveled;
+      const endX = startX + dirX * segLen;
+      const endY = startY + dirY * segLen;
+      
+      if (drawing) {
+        this.addLine(startX, startY, endX, endY, r, g, b, a);
+      }
+      
+      traveled += segLen;
+      drawing = !drawing;
+    }
   }
 
   private addLine(x1: number, y1: number, x2: number, y2: number, 
