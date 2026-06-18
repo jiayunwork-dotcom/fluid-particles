@@ -6,11 +6,13 @@ import {
 } from '../types';
 import { vec2, vec2Add, vec2Sub, vec2Mul, vec2Div, vec2Normalize, vec2Length, generateId } from '../utils/math';
 import { encodeGif } from '../utils/gifEncoder';
+import { TrajectoryController } from './trajectoryController';
 
 export class UIController {
   private canvas: HTMLCanvasElement;
   private sphSystem: SPHSystem;
   private renderer: Renderer;
+  private trajectoryController: TrajectoryController;
   
   private currentTool: ToolType = 'gravity';
   private isDrawing: boolean = false;
@@ -48,6 +50,7 @@ export class UIController {
     this.canvas = canvas;
     this.sphSystem = sphSystem;
     this.renderer = renderer;
+    this.trajectoryController = new TrajectoryController(canvas, renderer, sphSystem);
     
     this.bindEvents();
   }
@@ -90,6 +93,11 @@ export class UIController {
     }
     
     if (e.button === 0) {
+      if (this.trajectoryController.isPlaying()) {
+        this.trajectoryController.startSelection(e);
+        return;
+      }
+      
       if (e.shiftKey) {
         this.isDrawing = true;
         return;
@@ -128,6 +136,12 @@ export class UIController {
   private onMouseMove(e: MouseEvent): void {
     const pos = this.getCanvasPos(e);
     const delta = vec2Sub(pos, this.lastMousePos);
+    
+    if (this.trajectoryController.isPlaying()) {
+      this.trajectoryController.updateSelection(e);
+      this.lastMousePos = { ...pos };
+      return;
+    }
     
     if (e.shiftKey && e.buttons & 1) {
       const strength = 5000;
@@ -170,6 +184,11 @@ export class UIController {
 
   private onMouseUp(e: MouseEvent): void {
     const pos = this.getCanvasPos(e);
+    
+    if (this.trajectoryController.isPlaying()) {
+      this.trajectoryController.endSelection(e);
+      return;
+    }
     
     if (this.isDraggingObstacle) {
       this.isDraggingObstacle = false;
@@ -456,6 +475,94 @@ export class UIController {
         menu.style.display = 'none';
       }
     });
+
+    this.setupTrajectoryControls();
+  }
+
+  private setupTrajectoryControls(): void {
+    const recordBtn = document.getElementById('btnTrajRecord');
+    if (recordBtn) {
+      recordBtn.addEventListener('click', () => {
+        if (this.trajectoryController.isRecording()) {
+          this.trajectoryController.stopRecording();
+        } else {
+          this.trajectoryController.startRecording();
+        }
+      });
+    }
+
+    const playBtn = document.getElementById('btnTrajPlay');
+    if (playBtn) {
+      playBtn.addEventListener('click', () => {
+        if (this.trajectoryController.isPlaying()) {
+          this.trajectoryController.stopPlayback();
+        } else {
+          this.trajectoryController.startPlayback();
+        }
+      });
+    }
+
+    const clearBtn = document.getElementById('btnTrajClear');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        this.trajectoryController.clearTrajectory();
+      });
+    }
+
+    const exportBtn = document.getElementById('btnTrajExport');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', () => {
+        this.trajectoryController.exportJSON();
+      });
+    }
+
+    const importBtn = document.getElementById('btnTrajImport');
+    const fileInput = document.getElementById('trajFileInput') as HTMLInputElement;
+    if (importBtn && fileInput) {
+      importBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', async (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (file) {
+          try {
+            await this.trajectoryController.importJSON(file);
+          } catch (err) {
+            console.error('Failed to import trajectory:', err);
+            alert('导入失败：无效的轨迹文件');
+          }
+        }
+        fileInput.value = '';
+      });
+    }
+
+    const speedSlider = document.getElementById('trajSpeed') as HTMLInputElement;
+    if (speedSlider) {
+      speedSlider.addEventListener('input', () => {
+        const speed = parseFloat(speedSlider.value);
+        const speedValue = document.getElementById('trajSpeedValue');
+        if (speedValue) {
+          speedValue.textContent = `${speed.toFixed(2)}x`;
+        }
+      });
+      speedSlider.addEventListener('change', () => {
+        const speed = parseFloat(speedSlider.value);
+        this.trajectoryController.setPlaybackSpeed(speed);
+      });
+    }
+
+    const timelineSlider = document.getElementById('trajTimeline') as HTMLInputElement;
+    if (timelineSlider) {
+      timelineSlider.addEventListener('input', () => {
+        const frameIndex = parseInt(timelineSlider.value);
+        this.trajectoryController.setCurrentFrame(frameIndex);
+      });
+    }
+
+    const exitBtn = document.getElementById('btnTrajExit');
+    if (exitBtn) {
+      exitBtn.addEventListener('click', () => {
+        this.trajectoryController.exitPlayback();
+      });
+    }
   }
 
   private setupSlider(
@@ -953,5 +1060,9 @@ export class UIController {
 
   getCurrentBrushPoints(): BrushPoint[] {
     return [...this.currentBrushPoints];
+  }
+
+  getTrajectoryController() {
+    return this.trajectoryController;
   }
 }

@@ -90,22 +90,32 @@ class FluidSimulationApp {
     const currentTime = performance.now();
     const dt = Math.min((currentTime - this.lastTime) / 1000, 0.033);
     this.lastTime = currentTime;
-    
-    this.sphSystem.update(dt);
-    
-    const particles = this.sphSystem.getParticles();
-    const forceFields = this.sphSystem.getForceFields();
-    const obstacles = this.sphSystem.getObstacles();
-    
-    this.renderer.render(particles, forceFields, obstacles);
-    
-    if (this.uiController.isRecordingState()) {
-      const frame = this.renderer.captureFrame();
-      this.uiController.addRecordedFrame(frame);
+
+    const trajectoryController = this.uiController.getTrajectoryController();
+
+    if (trajectoryController.isPlaying()) {
+      trajectoryController.updatePlayback(currentTime);
+    } else {
+      this.sphSystem.update(dt);
+
+      const particles = this.sphSystem.getParticles();
+      const forceFields = this.sphSystem.getForceFields();
+      const obstacles = this.sphSystem.getObstacles();
+
+      this.renderer.render(particles, forceFields, obstacles);
+
+      if (this.uiController.isRecordingState()) {
+        const frame = this.renderer.captureFrame();
+        this.uiController.addRecordedFrame(frame);
+      }
+
+      if (trajectoryController.isRecording()) {
+        trajectoryController.recordFrame();
+      }
     }
-    
+
     this.updateFPS(dt);
-    
+
     this.animationFrameId = requestAnimationFrame(() => this.animate());
   }
 

@@ -1,4 +1,4 @@
-import { Particle, ForceField, Obstacle, Vec2, RenderMode } from '../types';
+import { Particle, ForceField, Obstacle, Vec2, RenderMode, TrajectoryFrame } from '../types';
 import { createProgramFromSources, createBuffer, createTexture, createFramebuffer, resizeCanvas } from './glUtils';
 import {
   particleSpriteVS, particleSpriteFS,
@@ -841,6 +841,163 @@ export class Renderer {
       
       gl.deleteBuffer(buffer);
     }
+  }
+
+  renderTrajectory(
+    frames: TrajectoryFrame[],
+    endFrameIndex: number,
+    selectedParticleIndices: number[],
+    particleCount: number
+  ): void {
+    const gl = this.gl;
+    const width = this.canvas.width;
+    const height = this.canvas.height;
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, width, height);
+    gl.clearColor(0.02, 0.02, 0.08, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    this.renderBackground();
+
+    const maxFrames = Math.min(endFrameIndex + 1, frames.length);
+    if (maxFrames < 2) return;
+
+    this.beginLines();
+
+    const hasSelection = selectedParticleIndices.length > 0;
+    const selectedSet = new Set(selectedParticleIndices);
+
+    for (let pIdx = 0; pIdx < particleCount; pIdx++) {
+      const isSelected = hasSelection && selectedSet.has(pIdx);
+      const baseAlpha = hasSelection ? (isSelected ? 1.0 : 0.15) : 0.6;
+
+      for (let fIdx = 0; fIdx < maxFrames - 1; fIdx++) {
+        const frame1 = frames[fIdx];
+        const frame2 = frames[fIdx + 1];
+
+        if (!frame1 || !frame2) continue;
+
+        const posIdx = pIdx * 2;
+        const x1 = frame1.positions[posIdx];
+        const y1 = frame1.positions[posIdx + 1];
+        const x2 = frame2.positions[posIdx];
+        const y2 = frame2.positions[posIdx + 1];
+
+        if (x1 === undefined || y1 === undefined || x2 === undefined || y2 === undefined) continue;
+
+        const t = fIdx / (maxFrames - 1);
+        let r: number, g: number, b: number;
+
+        if (isSelected) {
+          r = 1.0;
+          g = 0.9;
+          b = 0.0;
+        } else {
+          const gray = 0.3 + t * 0.7;
+          r = gray;
+          g = gray;
+          b = gray;
+        }
+
+        this.addLine(x1, y1, x2, y2, r, g, b, baseAlpha);
+      }
+    }
+
+    this.drawLines();
+
+    if (maxFrames > 0) {
+      const currentFrame = frames[maxFrames - 1];
+      if (currentFrame) {
+        this.renderTrajectoryParticles(currentFrame, particleCount, selectedParticleIndices);
+      }
+    }
+  }
+
+  private renderTrajectoryParticles(
+    frame: TrajectoryFrame,
+    particleCount: number,
+    selectedParticleIndices: number[]
+  ): void {
+    const gl = this.gl;
+    const count = Math.min(particleCount, this.maxParticles);
+    const program = this.programs.particleSprite;
+
+    const hasSelection = selectedParticleIndices.length > 0;
+    const selectedSet = new Set(selectedParticleIndices);
+
+    const posData = new Float32Array(count * 2);
+    const velData = new Float32Array(count * 2);
+    const speedData = new Float32Array(count);
+    const colorData = new Float32Array(count * 3);
+
+    for (let i = 0; i < count; i++) {
+      const posIdx = i * 2;
+      const velIdx = i * 2;
+      posData[posIdx] = frame.positions[posIdx];
+      posData[posIdx + 1] = frame.positions[posIdx + 1];
+      velData[velIdx] = frame.velocities[velIdx];
+      velData[velIdx + 1] = frame.velocities[velIdx + 1];
+      speedData[i] = Math.sqrt(
+        frame.velocities[velIdx] * frame.velocities[velIdx] +
+        frame.velocities[velIdx + 1] * frame.velocities[velIdx + 1]
+      );
+
+      if (hasSelection && selectedSet.has(i)) {
+        colorData[i * 3] = 1.0;
+        colorData[i * 3 + 1] = 0.9;
+        colorData[i * 3 + 2] = 0.0;
+      } else {
+        const t = i / count;
+        colorData[i * 3] = 0.7 + t * 0.3;
+        colorData[i * 3 + 1] = 0.8 + t * 0.2;
+        colorData[i * 3 + 2] = 1.0;
+      }
+    }
+
+    gl.useProgram(program);
+
+    const posLoc = gl.getAttribLocation(program, 'a_position');
+    const velLoc = gl.getAttribLocation(program, 'a_velocity');
+    const speedLoc = gl.getAttribLocation(program, 'a_speed');
+
+    const resLoc = gl.getUniformLocation(program, 'u_resolution');
+    const sizeLoc = gl.getUniformLocation(program, 'u_particleSize');
+    const maxSpeedLoc = gl.getUniformLocation(program, 'u_maxSpeed');
+    const alphaLoc = gl.getUniformLocation(program, 'u_alpha');
+    const motionBlurLoc = gl.getUniformLocation(program, 'u_motionBlur');
+    const viewOffsetLoc = gl.getUniformLocation(program, 'u_viewOffset');
+    const viewScaleLoc = gl.getUniformLocation(program, 'u_viewScale');
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.particlePositionBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, posData);
+    gl.enableVertexAttribArray(posLoc);
+    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.particleVelocityBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, velData);
+    gl.enableVertexAttribArray(velLoc);
+    gl.vertexAttribPointer(velLoc, 2, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.particleSpeedBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, speedData);
+    gl.enableVertexAttribArray(speedLoc);
+    gl.vertexAttribPointer(speedLoc, 1, gl.FLOAT, false, 0, 0);
+
+    gl.uniform2f(resLoc, this.canvas.width, this.canvas.height);
+    gl.uniform1f(sizeLoc, this.particleSize * 1.2);
+    gl.uniform1f(maxSpeedLoc, this.maxSpeed);
+    gl.uniform1f(alphaLoc, 1.0);
+    gl.uniform1i(motionBlurLoc, 0);
+    gl.uniform2f(viewOffsetLoc, this.viewOffset.x, this.viewOffset.y);
+    gl.uniform1f(viewScaleLoc, this.viewScale);
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+
+    gl.drawArrays(gl.POINTS, 0, count);
+
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   }
 
   captureFrame(): ImageData {

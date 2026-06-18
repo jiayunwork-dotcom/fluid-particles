@@ -84,3 +84,37 @@ export interface ObstacleDrawState {
   isDrawing: boolean;
   points: Vec2[];
 }
+
+export interface TrajectoryFrame {
+  timestamp: number;
+  frameIndex: number;
+  positions: Float32Array;
+  velocities: Float32Array;
+}
+
+export interface TrajectoryData {
+  version: number;
+  particleCount: number;
+  totalFrames: number;
+  frameInterval: number;
+  startTime: number;
+  endTime: number;
+  frames: TrajectoryFrame[];
+}
+
+export interface TrajectoryState {
+  isRecording: boolean;
+  isPlaying: boolean;
+  currentFrameIndex: number;
+  playbackSpeed: number;
+  selectedParticleIndices: number[];
+  playheadTime: number;
+}
+
+export interface SelectionBox {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  isSelecting: boolean;
+}
