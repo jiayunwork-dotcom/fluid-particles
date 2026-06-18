@@ -5,6 +5,7 @@ import {
   MaterialParams, SimParams, RenderMode, BrushPoint
 } from '../types';
 import { vec2, vec2Add, vec2Sub, vec2Mul, vec2Div, vec2Normalize, vec2Length, generateId } from '../utils/math';
+import { encodeGif } from '../utils/gifEncoder';
 
 export class UIController {
   private canvas: HTMLCanvasElement;
@@ -863,21 +864,59 @@ export class UIController {
   }
 
   private exportGif(): void {
-    alert(`录制完成！共 ${this.recordedFrames.length} 帧。\n（GIF编码需要额外的库支持，当前仅采集帧数据）`);
-    
-    const canvas = document.createElement('canvas');
-    canvas.width = this.recordedFrames[0].width;
-    canvas.height = this.recordedFrames[0].height;
-    const ctx = canvas.getContext('2d');
-    
-    if (ctx && this.recordedFrames.length > 0) {
-      ctx.putImageData(this.recordedFrames[0], 0, 0);
-      
-      const link = document.createElement('a');
-      link.download = 'fluid-frame.png';
-      link.href = canvas.toDataURL('image/png');
-      link.click();
+    const indicator = document.getElementById('recordingIndicator');
+    if (indicator) {
+      indicator.textContent = '正在生成GIF...';
+      indicator.style.color = '#ffaa00';
     }
+
+    setTimeout(() => {
+      try {
+        const delay = 1000 / this.recordFps;
+        const gifBlob = encodeGif(this.recordedFrames, {
+          delay: delay,
+          quality: 15
+        });
+
+        const url = URL.createObjectURL(gifBlob);
+        const link = document.createElement('a');
+        link.download = 'fluid-simulation.gif';
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+
+        if (indicator) {
+          indicator.textContent = '录制完成';
+          indicator.style.color = '#00ff00';
+          setTimeout(() => {
+            if (indicator) {
+              indicator.style.display = 'none';
+            }
+          }, 2000);
+        }
+      } catch (error) {
+        console.error('GIF generation failed:', error);
+        alert('GIF生成失败，已下载首帧截图作为备用');
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = this.recordedFrames[0].width;
+        canvas.height = this.recordedFrames[0].height;
+        const ctx = canvas.getContext('2d');
+        
+        if (ctx && this.recordedFrames.length > 0) {
+          ctx.putImageData(this.recordedFrames[0], 0, 0);
+          
+          const link = document.createElement('a');
+          link.download = 'fluid-frame.png';
+          link.href = canvas.toDataURL('image/png');
+          link.click();
+        }
+
+        if (indicator) {
+          indicator.style.display = 'none';
+        }
+      }
+    }, 10);
   }
 
   isRecordingState(): boolean {

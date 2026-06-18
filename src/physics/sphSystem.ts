@@ -36,6 +36,7 @@ export class SPHSystem {
     this.h = simParams.smoothingRadius;
     this.spatialHash = new SpatialHash(this.h);
     this.calculateKernelCoefficients();
+    this.neighborArray = new Array(500);
     this.initializeParticles(particleCount);
   }
 
@@ -197,9 +198,9 @@ export class SPHSystem {
   update(dt: number): void {
     if (this.isPaused) return;
     
-    const clampedDt = Math.min(dt, this.simParams.dt * 2);
-    const substeps = Math.ceil(dt / this.simParams.dt);
-    const stepDt = dt / substeps;
+    const clampedDt = Math.min(dt, this.simParams.dt * 3);
+    const substeps = Math.min(Math.ceil(clampedDt / this.simParams.dt), 2);
+    const stepDt = clampedDt / substeps;
     
     for (let i = 0; i < substeps; i++) {
       this.step(stepDt);
@@ -235,10 +236,10 @@ export class SPHSystem {
     for (let i = 0; i < particles.length; i++) {
       const pi = particles[i];
       let density = 0;
-      this.spatialHash.getNeighborsFast(pi.position, neighbors);
+      const neighborCount = this.spatialHash.getNeighborsFast(pi.position, neighbors);
       const pxi = pi.position.x, pyi = pi.position.y;
 
-      for (let j = 0; j < neighbors.length; j++) {
+      for (let j = 0; j < neighborCount; j++) {
         const idx = neighbors[j];
         const pj = particles[idx];
         const dx = pxi - pj.position.x;
@@ -276,10 +277,10 @@ export class SPHSystem {
     for (let i = 0; i < particles.length; i++) {
       const pi = particles[i];
       let fx = 0, fy = 0;
-      this.spatialHash.getNeighborsFast(pi.position, neighbors);
+      const neighborCount = this.spatialHash.getNeighborsFast(pi.position, neighbors);
       const pxi = pi.position.x, pyi = pi.position.y;
 
-      for (let j = 0; j < neighbors.length; j++) {
+      for (let j = 0; j < neighborCount; j++) {
         const idx = neighbors[j];
         if (i === idx) continue;
         
@@ -616,12 +617,12 @@ export class SPHSystem {
     
     for (let i = 0; i < particles.length; i++) {
       const pi = particles[i];
-      this.spatialHash.getNeighborsFast(pi.position, neighbors);
+      const neighborCount = this.spatialHash.getNeighborsFast(pi.position, neighbors);
       let cgx = 0, cgy = 0;
       let colorLaplacian = 0;
       const pxi = pi.position.x, pyi = pi.position.y;
       
-      for (let j = 0; j < neighbors.length; j++) {
+      for (let j = 0; j < neighborCount; j++) {
         const idx = neighbors[j];
         if (i === idx) continue;
         

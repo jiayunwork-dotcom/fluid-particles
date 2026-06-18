@@ -42,6 +42,15 @@ export class Renderer {
   private quadTexCoords: Float32Array;
   
   private maxParticles: number = 15000;
+  
+  private lineVertexData: Float32Array = new Float32Array(0);
+  private lineColorData: Float32Array = new Float32Array(0);
+  private lineVertexBuffer: WebGLBuffer | null = null;
+  private lineColorBuffer: WebGLBuffer | null = null;
+  private lineCount: number = 0;
+  private maxLines: number = 5000;
+  
+  private lineUniforms: { [key: string]: WebGLUniformLocation | null } = {};
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -93,6 +102,19 @@ export class Renderer {
     this.particleVelocityBuffer = createBuffer(gl, this.particleVelocityData, gl.DYNAMIC_DRAW);
     this.particleSpeedBuffer = createBuffer(gl, this.particleSpeedData, gl.DYNAMIC_DRAW);
     this.particleBufferSize = this.maxParticles;
+    
+    this.lineVertexData = new Float32Array(this.maxLines * 2 * 2);
+    this.lineColorData = new Float32Array(this.maxLines * 2 * 4);
+    this.lineVertexBuffer = createBuffer(gl, this.lineVertexData, gl.DYNAMIC_DRAW);
+    this.lineColorBuffer = createBuffer(gl, this.lineColorData, gl.DYNAMIC_DRAW);
+    
+    const lineProg = this.programs.line;
+    gl.useProgram(lineProg);
+    this.lineUniforms.u_resolution = gl.getUniformLocation(lineProg, 'u_resolution');
+    this.lineUniforms.u_viewOffset = gl.getUniformLocation(lineProg, 'u_viewOffset');
+    this.lineUniforms.u_viewScale = gl.getUniformLocation(lineProg, 'u_viewScale');
+    this.lineUniforms.u_useVertexColor = gl.getUniformLocation(lineProg, 'u_useVertexColor');
+    this.lineUniforms.u_color = gl.getUniformLocation(lineProg, 'u_color');
     
     this.resize();
     window.addEventListener('resize', () => this.resize());
@@ -250,25 +272,26 @@ export class Renderer {
     
     for (let i = 0; i < count; i++) {
       const p = particles[i];
-      posData[i * 2] = p.position.x;
-      posData[i * 2 + 1] = p.position.y;
-      velData[i * 2] = p.velocity.x;
-      velData[i * 2 + 1] = p.velocity.y;
-      speedData[i] = vec2Length(p.velocity);
+      const px = p.position.x;
+      const py = p.position.y;
+      const vx = p.velocity.x;
+      const vy = p.velocity.y;
+      
+      posData[i * 2] = px;
+      posData[i * 2 + 1] = py;
+      velData[i * 2] = vx;
+      velData[i * 2 + 1] = vy;
+      speedData[i] = Math.sqrt(vx * vx + vy * vy);
     }
     
-    if (this.particlePositionBuffer) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.particlePositionBuffer);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, posData.subarray(0, count * 2));
-    }
-    if (this.particleVelocityBuffer) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.particleVelocityBuffer);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, velData.subarray(0, count * 2));
-    }
-    if (this.particleSpeedBuffer) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.particleSpeedBuffer);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, speedData.subarray(0, count));
-    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.particlePositionBuffer!);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, posData.subarray(0, count * 2));
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.particleVelocityBuffer!);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, velData.subarray(0, count * 2));
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.particleSpeedBuffer!);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, speedData.subarray(0, count));
     
     return count;
   }
@@ -494,70 +517,169 @@ export class Renderer {
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
 
-  private renderForceFields(fields: ForceField[]): void {
-    const gl = this.gl;
-    const program = this.programs.forceField;
-    const lineProgram = this.programs.line;
+  private beginLines(): void {
+    this.lineCount = 0;
+  }
+
+  private addLine(x1: number, y1: number, x2: number, y2: number, 
+                  r: number, g: number, b: number, a: number): void {
+    if (this.lineCount >= this.maxLines) {
+      this.growLineBuffer();
+    }
     
-    for (const field of fields) {
-      if (field.type === 'brush') {
-        this.renderBrushField(field);
-      } else if (field.type === 'flow') {
-        this.renderFlowField(field);
-      } else if (field.type === 'obstacle') {
-        continue;
-      } else {
-        this.renderPointField(field);
-      }
+    const idx = this.lineCount * 2;
+    this.lineVertexData[idx * 2] = x1;
+    this.lineVertexData[idx * 2 + 1] = y1;
+    this.lineVertexData[(idx + 1) * 2] = x2;
+    this.lineVertexData[(idx + 1) * 2 + 1] = y2;
+    
+    this.lineColorData[idx * 4] = r;
+    this.lineColorData[idx * 4 + 1] = g;
+    this.lineColorData[idx * 4 + 2] = b;
+    this.lineColorData[idx * 4 + 3] = a;
+    
+    this.lineColorData[(idx + 1) * 4] = r;
+    this.lineColorData[(idx + 1) * 4 + 1] = g;
+    this.lineColorData[(idx + 1) * 4 + 2] = b;
+    this.lineColorData[(idx + 1) * 4 + 3] = a;
+    
+    this.lineCount++;
+  }
+
+  private addArrow(x1: number, y1: number, x2: number, y2: number,
+                   r: number, g: number, b: number, a: number,
+                   headLength: number = 10, headAngle: number = Math.PI / 6): void {
+    this.addLine(x1, y1, x2, y2, r, g, b, a);
+    
+    const lineAngle = Math.atan2(y2 - y1, x2 - x1);
+    
+    const hx1 = x2 - headLength * Math.cos(lineAngle - headAngle);
+    const hy1 = y2 - headLength * Math.sin(lineAngle - headAngle);
+    this.addLine(x2, y2, hx1, hy1, r, g, b, a);
+    
+    const hx2 = x2 - headLength * Math.cos(lineAngle + headAngle);
+    const hy2 = y2 - headLength * Math.sin(lineAngle + headAngle);
+    this.addLine(x2, y2, hx2, hy2, r, g, b, a);
+  }
+
+  private addCircle(cx: number, cy: number, radius: number, segments: number,
+                    r: number, g: number, b: number, a: number): void {
+    for (let i = 0; i < segments; i++) {
+      const angle1 = (i / segments) * Math.PI * 2;
+      const angle2 = ((i + 1) / segments) * Math.PI * 2;
+      
+      const x1 = cx + Math.cos(angle1) * radius;
+      const y1 = cy + Math.sin(angle1) * radius;
+      const x2 = cx + Math.cos(angle2) * radius;
+      const y2 = cy + Math.sin(angle2) * radius;
+      
+      this.addLine(x1, y1, x2, y2, r, g, b, a);
     }
   }
 
-  private renderPointField(field: ForceField): void {
+  private growLineBuffer(): void {
     const gl = this.gl;
-    const lineProgram = this.programs.line;
+    this.maxLines = Math.floor(this.maxLines * 1.5);
+    
+    const newVertexData = new Float32Array(this.maxLines * 2 * 2);
+    newVertexData.set(this.lineVertexData);
+    this.lineVertexData = newVertexData;
+    
+    const newColorData = new Float32Array(this.maxLines * 2 * 4);
+    newColorData.set(this.lineColorData);
+    this.lineColorData = newColorData;
+    
+    if (this.lineVertexBuffer) {
+      gl.deleteBuffer(this.lineVertexBuffer);
+    }
+    if (this.lineColorBuffer) {
+      gl.deleteBuffer(this.lineColorBuffer);
+    }
+    
+    this.lineVertexBuffer = createBuffer(gl, this.lineVertexData, gl.DYNAMIC_DRAW);
+    this.lineColorBuffer = createBuffer(gl, this.lineColorData, gl.DYNAMIC_DRAW);
+  }
+
+  private drawLines(): void {
+    if (this.lineCount === 0) return;
+    
+    const gl = this.gl;
+    const program = this.programs.line;
+    
+    gl.useProgram(program);
+    
+    const posLoc = gl.getAttribLocation(program, 'a_position');
+    const colorLoc = gl.getAttribLocation(program, 'a_color');
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.lineVertexBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.lineVertexData.subarray(0, this.lineCount * 4));
+    gl.enableVertexAttribArray(posLoc);
+    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.lineColorBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.lineColorData.subarray(0, this.lineCount * 8));
+    gl.enableVertexAttribArray(colorLoc);
+    gl.vertexAttribPointer(colorLoc, 4, gl.FLOAT, false, 0, 0);
+    
+    gl.uniform2f(this.lineUniforms.u_resolution!, this.canvas.width, this.canvas.height);
+    gl.uniform2f(this.lineUniforms.u_viewOffset!, this.viewOffset.x, this.viewOffset.y);
+    gl.uniform1f(this.lineUniforms.u_viewScale!, this.viewScale);
+    gl.uniform1f(this.lineUniforms.u_useVertexColor!, 1.0);
+    
+    gl.drawArrays(gl.LINES, 0, this.lineCount * 2);
+  }
+
+  private renderForceFields(fields: ForceField[]): void {
+    if (fields.length === 0) return;
+    
+    this.beginLines();
+    
+    for (const field of fields) {
+      if (field.type === 'brush') {
+        this.buildBrushField(field);
+      } else if (field.type === 'flow') {
+        this.buildFlowField(field);
+      } else if (field.type === 'obstacle') {
+        continue;
+      } else {
+        this.buildPointField(field);
+      }
+    }
+    
+    this.drawLines();
+  }
+
+  private buildPointField(field: ForceField): void {
     const center = field.position;
     const radius = field.radius;
     const numArrows = 12;
     
-    let color: [number, number, number, number];
+    let cr: number, cg: number, cb: number, ca: number;
     switch (field.type) {
       case 'gravity':
-        color = [0.4, 0.6, 1.0, this.forceFieldAlpha];
+        cr = 0.4; cg = 0.6; cb = 1.0; ca = this.forceFieldAlpha;
         break;
       case 'repel':
-        color = [1.0, 0.5, 0.3, this.forceFieldAlpha];
+        cr = 1.0; cg = 0.5; cb = 0.3; ca = this.forceFieldAlpha;
         break;
       case 'vortex':
-        color = [0.6, 1.0, 0.6, this.forceFieldAlpha];
+        cr = 0.6; cg = 1.0; cb = 0.6; ca = this.forceFieldAlpha;
         break;
       case 'emitter':
-        color = [1.0, 0.8, 0.4, this.forceFieldAlpha];
+        cr = 1.0; cg = 0.8; cb = 0.4; ca = this.forceFieldAlpha;
         break;
       case 'sink':
-        color = [0.6, 0.3, 0.8, this.forceFieldAlpha];
+        cr = 0.6; cg = 0.3; cb = 0.8; ca = this.forceFieldAlpha;
         break;
       default:
-        color = [1.0, 1.0, 1.0, this.forceFieldAlpha];
+        cr = 1.0; cg = 1.0; cb = 1.0; ca = this.forceFieldAlpha;
     }
     
-    gl.useProgram(lineProgram);
-    
-    const posLoc = gl.getAttribLocation(lineProgram, 'a_position');
-    const resLoc = gl.getUniformLocation(lineProgram, 'u_resolution');
-    const colorLoc = gl.getUniformLocation(lineProgram, 'u_color');
-    const viewOffsetLoc = gl.getUniformLocation(lineProgram, 'u_viewOffset');
-    const viewScaleLoc = gl.getUniformLocation(lineProgram, 'u_viewScale');
-    const lineWidthLoc = gl.getUniformLocation(lineProgram, 'u_lineWidth');
-    
-    gl.uniform2f(resLoc, this.canvas.width, this.canvas.height);
-    gl.uniform4f(colorLoc, color[0], color[1], color[2], color[3]);
-    gl.uniform2f(viewOffsetLoc, this.viewOffset.x, this.viewOffset.y);
-    gl.uniform1f(viewScaleLoc, this.viewScale);
-    gl.uniform1f(lineWidthLoc, 2);
+    const arrowLength = radius * 0.3;
+    const headLength = arrowLength * 0.3;
     
     for (let i = 0; i < numArrows; i++) {
       const angle = (i / numArrows) * Math.PI * 2;
-      const arrowLength = radius * 0.3;
       
       let startX: number, startY: number, endX: number, endY: number;
       
@@ -586,214 +708,95 @@ export class Renderer {
         continue;
       }
       
-      const arrowData = new Float32Array([
-        startX, startY,
-        endX, endY
-      ]);
-      
-      const arrowBuffer = createBuffer(gl, arrowData, gl.DYNAMIC_DRAW);
-      gl.bindBuffer(gl.ARRAY_BUFFER, arrowBuffer);
-      gl.enableVertexAttribArray(posLoc);
-      gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-      
-      gl.drawArrays(gl.LINES, 0, 2);
-      
-      const headLength = arrowLength * 0.3;
-      const headAngle = Math.PI / 6;
-      const lineAngle = Math.atan2(endY - startY, endX - startX);
-      
-      const headData = new Float32Array([
-        endX, endY,
-        endX - headLength * Math.cos(lineAngle - headAngle), endY - headLength * Math.sin(lineAngle - headAngle),
-        endX, endY,
-        endX - headLength * Math.cos(lineAngle + headAngle), endY - headLength * Math.sin(lineAngle + headAngle)
-      ]);
-      
-      const headBuffer = createBuffer(gl, headData, gl.DYNAMIC_DRAW);
-      gl.bindBuffer(gl.ARRAY_BUFFER, headBuffer);
-      gl.enableVertexAttribArray(posLoc);
-      gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-      
-      gl.drawArrays(gl.LINES, 0, 4);
-      
-      gl.deleteBuffer(arrowBuffer);
-      gl.deleteBuffer(headBuffer);
+      this.addArrow(startX, startY, endX, endY, cr, cg, cb, ca, headLength);
     }
     
-    const circleSegments = 32;
-    const circleData = new Float32Array(circleSegments * 2);
-    for (let i = 0; i < circleSegments; i++) {
-      const angle = (i / circleSegments) * Math.PI * 2;
-      circleData[i * 2] = center.x + Math.cos(angle) * radius;
-      circleData[i * 2 + 1] = center.y + Math.sin(angle) * radius;
-    }
-    
-    const circleBuffer = createBuffer(gl, circleData, gl.DYNAMIC_DRAW);
-    gl.bindBuffer(gl.ARRAY_BUFFER, circleBuffer);
-    gl.enableVertexAttribArray(posLoc);
-    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-    
-    gl.uniform4f(colorLoc, color[0], color[1], color[2], color[3] * 0.3);
-    gl.drawArrays(gl.LINE_LOOP, 0, circleSegments);
-    
-    gl.deleteBuffer(circleBuffer);
+    this.addCircle(center.x, center.y, radius, 32, cr, cg, cb, ca * 0.3);
   }
 
-  private renderFlowField(field: ForceField): void {
+  private buildFlowField(field: ForceField): void {
     if (!field.points || field.points.length < 2) return;
     
-    const gl = this.gl;
-    const lineProgram = this.programs.line;
     const p1 = field.points[0];
     const p2 = field.points[1];
     const width = field.radius;
     
-    const lineVec = { x: p2.x - p1.x, y: p2.y - p1.y };
-    const lineLen = Math.sqrt(lineVec.x * lineVec.x + lineVec.y * lineVec.y);
+    const lineVecX = p2.x - p1.x;
+    const lineVecY = p2.y - p1.y;
+    const lineLen = Math.sqrt(lineVecX * lineVecX + lineVecY * lineVecY);
     if (lineLen < 1) return;
     
-    const dirX = lineVec.x / lineLen;
-    const dirY = lineVec.y / lineLen;
+    const dirX = lineVecX / lineLen;
+    const dirY = lineVecY / lineLen;
     const perpX = -dirY;
     const perpY = dirX;
     
-    const numLines = 5;
-    const numArrows = Math.floor(lineLen / 30);
+    const numArrows = Math.max(1, Math.floor(lineLen / 30));
+    const arrowLen = Math.min(lineLen * 0.08, 20);
+    const headLen = arrowLen * 0.4;
     
-    gl.useProgram(lineProgram);
+    const cr = 0.5, cg = 0.8, cb = 1.0;
+    const boundaryAlpha = this.forceFieldAlpha * 0.3;
+    const arrowAlpha = this.forceFieldAlpha;
     
-    const posLoc = gl.getAttribLocation(lineProgram, 'a_position');
-    const resLoc = gl.getUniformLocation(lineProgram, 'u_resolution');
-    const colorLoc = gl.getUniformLocation(lineProgram, 'u_color');
-    const viewOffsetLoc = gl.getUniformLocation(lineProgram, 'u_viewOffset');
-    const viewScaleLoc = gl.getUniformLocation(lineProgram, 'u_viewScale');
-    
-    gl.uniform2f(resLoc, this.canvas.width, this.canvas.height);
-    gl.uniform4f(colorLoc, 0.5, 0.8, 1.0, this.forceFieldAlpha * 0.3);
-    gl.uniform2f(viewOffsetLoc, this.viewOffset.x, this.viewOffset.y);
-    gl.uniform1f(viewScaleLoc, this.viewScale);
-    
-    const boundaryData = new Float32Array([
-      p1.x + perpX * width, p1.y + perpY * width,
-      p2.x + perpX * width, p2.y + perpY * width,
-      p2.x - perpX * width, p2.y - perpY * width,
-      p1.x - perpX * width, p1.y - perpY * width
-    ]);
-    
-    const boundaryBuffer = createBuffer(gl, boundaryData, gl.DYNAMIC_DRAW);
-    gl.bindBuffer(gl.ARRAY_BUFFER, boundaryBuffer);
-    gl.enableVertexAttribArray(posLoc);
-    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-    
-    gl.drawArrays(gl.LINE_LOOP, 0, 4);
-    gl.deleteBuffer(boundaryBuffer);
-    
-    gl.uniform4f(colorLoc, 0.5, 0.8, 1.0, this.forceFieldAlpha);
+    this.addLine(p1.x + perpX * width, p1.y + perpY * width,
+                 p2.x + perpX * width, p2.y + perpY * width,
+                 cr, cg, cb, boundaryAlpha);
+    this.addLine(p2.x + perpX * width, p2.y + perpY * width,
+                 p2.x - perpX * width, p2.y - perpY * width,
+                 cr, cg, cb, boundaryAlpha);
+    this.addLine(p2.x - perpX * width, p2.y - perpY * width,
+                 p1.x - perpX * width, p1.y - perpY * width,
+                 cr, cg, cb, boundaryAlpha);
+    this.addLine(p1.x - perpX * width, p1.y - perpY * width,
+                 p1.x + perpX * width, p1.y + perpY * width,
+                 cr, cg, cb, boundaryAlpha);
     
     for (let i = 0; i < numArrows; i++) {
       const t = (i + 0.5) / numArrows;
-      const baseX = p1.x + lineVec.x * t;
-      const baseY = p1.y + lineVec.y * t;
-      const arrowLen = Math.min(lineLen * 0.08, 20);
+      const baseX = p1.x + lineVecX * t;
+      const baseY = p1.y + lineVecY * t;
       
-      const arrowData = new Float32Array([
-        baseX - dirX * arrowLen * 0.5, baseY - dirY * arrowLen * 0.5,
-        baseX + dirX * arrowLen * 0.5, baseY + dirY * arrowLen * 0.5
-      ]);
+      const startX = baseX - dirX * arrowLen * 0.5;
+      const startY = baseY - dirY * arrowLen * 0.5;
+      const endX = baseX + dirX * arrowLen * 0.5;
+      const endY = baseY + dirY * arrowLen * 0.5;
       
-      const arrowBuffer = createBuffer(gl, arrowData, gl.DYNAMIC_DRAW);
-      gl.bindBuffer(gl.ARRAY_BUFFER, arrowBuffer);
-      gl.enableVertexAttribArray(posLoc);
-      gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-      
-      gl.drawArrays(gl.LINES, 0, 2);
-      
-      const headLength = arrowLen * 0.4;
-      const headAngle = Math.PI / 6;
-      const lineAngle = Math.atan2(dirY, dirX);
-      
-      const headData = new Float32Array([
-        baseX + dirX * arrowLen * 0.5, baseY + dirY * arrowLen * 0.5,
-        baseX + dirX * arrowLen * 0.5 - headLength * Math.cos(lineAngle - headAngle),
-        baseY + dirY * arrowLen * 0.5 - headLength * Math.sin(lineAngle - headAngle),
-        baseX + dirX * arrowLen * 0.5, baseY + dirY * arrowLen * 0.5,
-        baseX + dirX * arrowLen * 0.5 - headLength * Math.cos(lineAngle + headAngle),
-        baseY + dirY * arrowLen * 0.5 - headLength * Math.sin(lineAngle + headAngle)
-      ]);
-      
-      const headBuffer = createBuffer(gl, headData, gl.DYNAMIC_DRAW);
-      gl.bindBuffer(gl.ARRAY_BUFFER, headBuffer);
-      gl.enableVertexAttribArray(posLoc);
-      gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-      
-      gl.drawArrays(gl.LINES, 0, 4);
-      
-      gl.deleteBuffer(arrowBuffer);
-      gl.deleteBuffer(headBuffer);
+      this.addArrow(startX, startY, endX, endY, cr, cg, cb, arrowAlpha, headLen);
     }
   }
 
-  private renderBrushField(field: ForceField): void {
+  private buildBrushField(field: ForceField): void {
     if (!field.brushPoints || field.brushPoints.length < 2) return;
     
-    const gl = this.gl;
-    const lineProgram = this.programs.line;
+    const cr = 1.0, cg = 0.6, cb = 0.8;
+    const pathAlpha = this.forceFieldAlpha * 0.5;
+    const arrowAlpha = this.forceFieldAlpha;
     
-    gl.useProgram(lineProgram);
-    
-    const posLoc = gl.getAttribLocation(lineProgram, 'a_position');
-    const resLoc = gl.getUniformLocation(lineProgram, 'u_resolution');
-    const colorLoc = gl.getUniformLocation(lineProgram, 'u_color');
-    const viewOffsetLoc = gl.getUniformLocation(lineProgram, 'u_viewOffset');
-    const viewScaleLoc = gl.getUniformLocation(lineProgram, 'u_viewScale');
-    
-    gl.uniform2f(resLoc, this.canvas.width, this.canvas.height);
-    gl.uniform4f(colorLoc, 1.0, 0.6, 0.8, this.forceFieldAlpha * 0.5);
-    gl.uniform2f(viewOffsetLoc, this.viewOffset.x, this.viewOffset.y);
-    gl.uniform1f(viewScaleLoc, this.viewScale);
-    
-    const pathData = new Float32Array(field.brushPoints.length * 2);
-    for (let i = 0; i < field.brushPoints.length; i++) {
-      pathData[i * 2] = field.brushPoints[i].position.x;
-      pathData[i * 2 + 1] = field.brushPoints[i].position.y;
+    for (let i = 0; i < field.brushPoints.length - 1; i++) {
+      const bp1 = field.brushPoints[i];
+      const bp2 = field.brushPoints[i + 1];
+      this.addLine(bp1.position.x, bp1.position.y,
+                   bp2.position.x, bp2.position.y,
+                   cr, cg, cb, pathAlpha);
     }
     
-    const pathBuffer = createBuffer(gl, pathData, gl.DYNAMIC_DRAW);
-    gl.bindBuffer(gl.ARRAY_BUFFER, pathBuffer);
-    gl.enableVertexAttribArray(posLoc);
-    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-    
-    gl.drawArrays(gl.LINE_STRIP, 0, field.brushPoints.length);
-    gl.deleteBuffer(pathBuffer);
-    
-    gl.uniform4f(colorLoc, 1.0, 0.6, 0.8, this.forceFieldAlpha);
-    
     const arrowStep = 5;
+    const arrowLen = 8;
+    
     for (let i = 0; i < field.brushPoints.length; i += arrowStep) {
       const bp = field.brushPoints[i];
-      const arrowLen = 8;
-      const dir = bp.direction;
-      const dirLen = Math.sqrt(dir.x * dir.x + dir.y * dir.y);
+      const dirLen = Math.sqrt(bp.direction.x * bp.direction.x + bp.direction.y * bp.direction.y);
       if (dirLen < 0.01) continue;
       
-      const ndx = dir.x / dirLen;
-      const ndy = dir.y / dirLen;
+      const ndx = bp.direction.x / dirLen;
+      const ndy = bp.direction.y / dirLen;
       
       const endX = bp.position.x + ndx * arrowLen;
       const endY = bp.position.y + ndy * arrowLen;
       
-      const arrowData = new Float32Array([
-        bp.position.x, bp.position.y,
-        endX, endY
-      ]);
-      
-      const arrowBuffer = createBuffer(gl, arrowData, gl.DYNAMIC_DRAW);
-      gl.bindBuffer(gl.ARRAY_BUFFER, arrowBuffer);
-      gl.enableVertexAttribArray(posLoc);
-      gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-      
-      gl.drawArrays(gl.LINES, 0, 2);
-      gl.deleteBuffer(arrowBuffer);
+      this.addArrow(bp.position.x, bp.position.y, endX, endY,
+                    cr, cg, cb, arrowAlpha, arrowLen * 0.4);
     }
   }
 

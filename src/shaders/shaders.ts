@@ -287,11 +287,15 @@ export const forceFieldFS = `
 
 export const lineVS = `
   attribute vec2 a_position;
+  attribute vec4 a_color;
   
   uniform vec2 u_resolution;
   uniform vec2 u_viewOffset;
   uniform float u_viewScale;
   uniform float u_lineWidth;
+  uniform float u_useVertexColor;
+  
+  varying vec4 v_color;
   
   void main() {
     vec2 pos = (a_position + u_viewOffset) * u_viewScale;
@@ -299,6 +303,7 @@ export const lineVS = `
     clipSpace.y = -clipSpace.y;
     
     gl_Position = vec4(clipSpace, 0.0, 1.0);
+    v_color = a_color;
   }
 `;
 
@@ -306,9 +311,16 @@ export const lineFS = `
   precision mediump float;
   
   uniform vec4 u_color;
+  uniform float u_useVertexColor;
+  
+  varying vec4 v_color;
   
   void main() {
-    gl_FragColor = u_color;
+    if (u_useVertexColor > 0.5) {
+      gl_FragColor = v_color;
+    } else {
+      gl_FragColor = u_color;
+    }
   }
 `;
 

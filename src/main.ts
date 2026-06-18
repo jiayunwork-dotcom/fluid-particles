@@ -40,7 +40,7 @@ class FluidSimulationApp {
       particleCount: 5000,
       smoothingRadius: 30,
       boundaryRestitution: 0.5,
-      dt: 0.025,
+      dt: 0.03,
       maxVelocity: 800
     };
     
