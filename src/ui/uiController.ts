@@ -51,6 +51,7 @@ export class UIController {
     this.sphSystem = sphSystem;
     this.renderer = renderer;
     this.trajectoryController = new TrajectoryController(canvas, renderer, sphSystem);
+    this.trajectoryController.setView(this.viewOffset, this.viewScale);
     
     this.bindEvents();
   }
@@ -280,6 +281,7 @@ export class UIController {
     this.viewScale = newScale;
     
     this.renderer.setView(this.viewOffset, this.viewScale);
+    this.trajectoryController.setView(this.viewOffset, this.viewScale);
   }
 
   private onContextMenu(e: MouseEvent): void {
@@ -551,9 +553,24 @@ export class UIController {
 
     const timelineSlider = document.getElementById('trajTimeline') as HTMLInputElement;
     if (timelineSlider) {
+      timelineSlider.addEventListener('mousedown', () => {
+        this.trajectoryController.startSeeking();
+      });
+      timelineSlider.addEventListener('touchstart', () => {
+        this.trajectoryController.startSeeking();
+      }, { passive: true });
       timelineSlider.addEventListener('input', () => {
         const frameIndex = parseInt(timelineSlider.value);
         this.trajectoryController.setCurrentFrame(frameIndex);
+      });
+      timelineSlider.addEventListener('change', () => {
+        this.trajectoryController.endSeeking();
+      });
+      timelineSlider.addEventListener('mouseup', () => {
+        this.trajectoryController.endSeeking();
+      });
+      timelineSlider.addEventListener('touchend', () => {
+        this.trajectoryController.endSeeking();
       });
     }
 
@@ -773,6 +790,7 @@ export class UIController {
     this.viewOffset = vec2(0, 0);
     this.viewScale = 1;
     this.renderer.setView(this.viewOffset, this.viewScale);
+    this.trajectoryController.setView(this.viewOffset, this.viewScale);
   }
 
   private applyMaterialPreset(material: string): void {

@@ -7,6 +7,9 @@ export class TrajectoryController {
   private renderer: Renderer;
   private sphSystem: SPHSystem;
 
+  private viewOffset: Vec2 = { x: 0, y: 0 };
+  private viewScale: number = 1;
+
   private trajectoryData: TrajectoryData | null = null;
   private trajectoryState: TrajectoryState = {
     isRecording: false,
@@ -21,6 +24,7 @@ export class TrajectoryController {
   private recordFrameInterval: number = 3;
   private lastPlaybackTime: number = 0;
   private baseFrameInterval: number = 1000 / 30;
+  private isUserSeeking: boolean = false;
 
   private selectionBox: SelectionBox = {
     startX: 0,
@@ -29,6 +33,8 @@ export class TrajectoryController {
     endY: 0,
     isSelecting: false
   };
+  private selectionBoxStartScreenX: number | undefined;
+  private selectionBoxStartScreenY: number | undefined;
 
   private onStateChange: (() => void) | null = null;
 
@@ -44,6 +50,20 @@ export class TrajectoryController {
 
   setOnStateChange(callback: () => void): void {
     this.onStateChange = callback;
+  }
+
+  setView(offset: Vec2, scale: number): void {
+    this.viewOffset = { ...offset };
+    this.viewScale = scale;
+  }
+
+  private screenToWorld(e: MouseEvent): Vec2 {
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    return {
+      x: (e.clientX - rect.left) * dpr / this.viewScale - this.viewOffset.x,
+      y: (e.clientY - rect.top) * dpr / this.viewScale - this.viewOffset.y
+    };
   }
 
   startRecording(): void {
@@ -113,6 +133,7 @@ export class TrajectoryController {
     this.trajectoryData.totalFrames = this.trajectoryData.frames.length;
 
     this.updateRecordedFramesUI();
+    this.updateRecordingIndicator();
     this.notifyStateChange();
   }
 
@@ -156,6 +177,12 @@ export class TrajectoryController {
   updatePlayback(currentTime: number): void {
     if (!this.trajectoryState.isPlaying || !this.trajectoryData) return;
 
+    if (this.isUserSeeking) {
+      this.lastPlaybackTime = currentTime;
+      this.render();
+      return;
+    }
+
     const deltaTime = (currentTime - this.lastPlaybackTime) * this.trajectoryState.playbackSpeed;
     this.lastPlaybackTime = currentTime;
     this.trajectoryState.playheadTime += deltaTime;
@@ -197,6 +224,15 @@ export class TrajectoryController {
     this.notifyStateChange();
   }
 
+  startSeeking(): void {
+    this.isUserSeeking = true;
+  }
+
+  endSeeking(): void {
+    this.isUserSeeking = false;
+    this.lastPlaybackTime = performance.now();
+  }
+
   setPlaybackSpeed(speed: number): void {
     this.trajectoryState.playbackSpeed = Math.max(0.25, Math.min(4, speed));
     this.updateSpeedUI();
@@ -223,16 +259,17 @@ export class TrajectoryController {
   startSelection(e: MouseEvent): void {
     if (!this.trajectoryState.isPlaying || !this.trajectoryData) return;
 
-    const rect = this.canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
+    const worldPos = this.screenToWorld(e);
 
     this.selectionBox = {
-      startX: (e.clientX - rect.left) * dpr,
-      startY: (e.clientY - rect.top) * dpr,
-      endX: (e.clientX - rect.left) * dpr,
-      endY: (e.clientY - rect.top) * dpr,
+      startX: worldPos.x,
+      startY: worldPos.y,
+      endX: worldPos.x,
+      endY: worldPos.y,
       isSelecting: true
     };
+    this.selectionBoxStartScreenX = e.clientX;
+    this.selectionBoxStartScreenY = e.clientY;
 
     this.showSelectionBox(e.clientX, e.clientY, 0, 0);
   }
@@ -240,23 +277,25 @@ export class TrajectoryController {
   updateSelection(e: MouseEvent): void {
     if (!this.selectionBox.isSelecting) return;
 
-    const rect = this.canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
+    const worldPos = this.screenToWorld(e);
+    this.selectionBox.endX = worldPos.x;
+    this.selectionBox.endY = worldPos.y;
 
-    this.selectionBox.endX = (e.clientX - rect.left) * dpr;
-    this.selectionBox.endY = (e.clientY - rect.top) * dpr;
+    const startX = this.selectionBoxStartScreenX ?? e.clientX;
+    const startY = this.selectionBoxStartScreenY ?? e.clientY;
+    const realMinX = Math.min(startX, e.clientX);
+    const realMinY = Math.min(startY, e.clientY);
+    const realW = Math.abs(e.clientX - startX);
+    const realH = Math.abs(e.clientY - startY);
 
-    const minX = Math.min(this.selectionBox.startX, this.selectionBox.endX) / dpr;
-    const minY = Math.min(this.selectionBox.startY, this.selectionBox.endY) / dpr;
-    const width = Math.abs(this.selectionBox.endX - this.selectionBox.startX) / dpr;
-    const height = Math.abs(this.selectionBox.endY - this.selectionBox.startY) / dpr;
-
-    this.showSelectionBox(minX + rect.left, minY + rect.top, width, height);
+    this.showSelectionBox(realMinX, realMinY, realW, realH);
   }
 
   endSelection(e: MouseEvent): void {
     if (!this.selectionBox.isSelecting || !this.trajectoryData) {
       this.selectionBox.isSelecting = false;
+      this.selectionBoxStartScreenX = undefined;
+      this.selectionBoxStartScreenY = undefined;
       this.hideSelectionBox();
       return;
     }
@@ -436,7 +475,9 @@ export class TrajectoryController {
       timeline.disabled = !hasData;
       if (hasData) {
         timeline.max = (this.trajectoryData!.frames.length - 1).toString();
-        timeline.value = this.trajectoryState.currentFrameIndex.toString();
+        if (!this.isUserSeeking) {
+          timeline.value = this.trajectoryState.currentFrameIndex.toString();
+        }
       }
     }
     this.updateFrameDisplay();
