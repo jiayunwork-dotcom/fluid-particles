@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebGL Fluid Particles Simulator</title>
+  <link rel="stylesheet" href="/src/styles/main.css">
+</head>
+<body>
+  <div id="app">
+    <canvas id="glCanvas"></canvas>
+    
+    <div id="toolbar" class="toolbar">
+      <div class="toolbar-title">力场工具</div>
+      <button class="tool-btn active" data-tool="gravity" title="引力井">⬇ 引力井</button>
+      <button class="tool-btn" data-tool="repel" title="排斥源">⬆ 排斥源</button>
+      <button class="tool-btn" data-tool="vortex" title="涡旋场">🌀 涡旋</button>
+      <button class="tool-btn" data-tool="flow" title="均匀流">➡ 均匀流</button>
+      <button class="tool-btn" data-tool="brush" title="自定义画笔">✏ 画笔</button>
+      <button class="tool-btn" data-tool="obstacle" title="障碍物">⬛ 障碍物</button>
+      <button class="tool-btn" data-tool="emitter" title="粒子源">💧 粒子源</button>
+      <button class="tool-btn" data-tool="sink" title="粒子汇">🕳️ 粒子汇</button>
+      <button class="tool-btn eraser" data-tool="eraser" title="橡皮擦">🧹 橡皮擦</button>
+    </div>
+
+    <div id="controlPanel" class="control-panel">
+      <div class="panel-section">
+        <div class="section-title">模拟控制</div>
+        <div class="control-row">
+          <label>粒子数量</label>
+          <input type="range" id="particleCount" min="1000" max="10000" value="5000" step="500">
+          <span id="particleCountValue">5000</span>
+        </div>
+        <div class="control-row">
+          <label>帧率</label>
+          <span id="fpsDisplay">0 fps</span>
+        </div>
+        <div class="control-row buttons">
+          <button id="btnPause">⏸ 暂停 (空格)</button>
+          <button id="btnReset">🔄 重置 (R)</button>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="section-title">材质预设</div>
+        <div class="material-presets">
+          <button class="preset-btn active" data-material="water">💧 水</button>
+          <button class="preset-btn" data-material="oil">🛢️ 油</button>
+          <button class="preset-btn" data-material="honey">🍯 蜂蜜</button>
+          <button class="preset-btn" data-material="sand">🏖️ 沙</button>
+        </div>
+        <div class="control-row">
+          <label>参考密度 ρ₀</label>
+          <input type="range" id="restDensity" min="500" max="2000" value="1000" step="50">
+          <span id="restDensityValue">1000</span>
+        </div>
+        <div class="control-row">
+          <label>粘度</label>
+          <input type="range" id="viscosity" min="0" max="500" value="50" step="5">
+          <span id="viscosityValue">50</span>
+        </div>
+        <div class="control-row">
+          <label>刚度系数</label>
+          <input type="range" id="stiffness" min="100" max="5000" value="2000" step="100">
+          <span id="stiffnessValue">2000</span>
+        </div>
+        <div class="control-row">
+          <label>表面张力</label>
+          <input type="range" id="surfaceTension" min="0" max="100" value="20" step="1">
+          <span id="surfaceTensionValue">20</span>
+        </div>
+        <div class="control-row">
+          <label>重力</label>
+          <input type="range" id="gravity" min="-2000" max="2000" value="-900" step="50">
+          <span id="gravityValue">-900</span>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="section-title">渲染模式</div>
+        <div class="render-modes">
+          <button class="render-btn active" data-render="sprite">✨ 粒子精灵</button>
+          <button class="render-btn" data-render="fluid">🌊 流体渲染</button>
+        </div>
+        <div class="control-row">
+          <label>粒子大小</label>
+          <input type="range" id="particleSize" min="1" max="20" value="8" step="0.5">
+          <span id="particleSizeValue">8</span>
+        </div>
+        <div class="control-row">
+          <label>力场透明度</label>
+          <input type="range" id="forceFieldAlpha" min="0" max="1" value="0.6" step="0.05">
+          <span id="forceFieldAlphaValue">0.60</span>
+        </div>
+        <div class="control-row">
+          <label>运动模糊</label>
+          <input type="checkbox" id="motionBlur" checked>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="section-title">力场参数</div>
+        <div class="control-row">
+          <label>强度</label>
+          <input type="range" id="forceStrength" min="100" max="10000" value="3000" step="100">
+          <span id="forceStrengthValue">3000</span>
+        </div>
+        <div class="control-row">
+          <label>影响半径</label>
+          <input type="range" id="forceRadius" min="20" max="300" value="100" step="10">
+          <span id="forceRadiusValue">100</span>
+        </div>
+        <div class="control-row">
+          <label>涡旋方向</label>
+          <select id="vortexDirection">
+            <option value="cw">顺时针</option>
+            <option value="ccw" selected>逆时针</option>
+          </select>
+        </div>
+        <div class="control-row">
+          <label>边界弹性</label>
+          <input type="range" id="boundaryRestitution" min="0" max="1" value="0.5" step="0.05">
+          <span id="boundaryRestitutionValue">0.50</span>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="section-title">导出</div>
+        <div class="control-row buttons">
+          <button id="btnSaveJSON">💾 保存力场</button>
+          <button id="btnLoadJSON">📂 加载力场</button>
+        </div>
+        <div class="control-row buttons">
+          <button id="btnRecordGIF">🎬 录制GIF</button>
+          <button id="btnStopRecord">⏹️ 停止录制</button>
+        </div>
+        <div class="control-row">
+          <label>录制帧数</label>
+          <input type="range" id="recordFrames" min="30" max="300" value="120" step="10">
+          <span id="recordFramesValue">120</span>
+        </div>
+        <input type="file" id="fileInput" accept=".json" style="display: none;">
+      </div>
+    </div>
+
+    <div id="contextMenu" class="context-menu" style="display: none;">
+      <div class="context-item" data-tool="gravity">⬇ 引力井</div>
+      <div class="context-item" data-tool="repel">⬆ 排斥源</div>
+      <div class="context-item" data-tool="vortex">🌀 涡旋场</div>
+      <div class="context-item" data-tool="flow">➡ 均匀流</div>
+      <div class="context-item" data-tool="brush">✏ 自定义画笔</div>
+      <div class="context-item" data-tool="obstacle">⬛ 障碍物</div>
+      <div class="context-item" data-tool="emitter">💧 粒子源</div>
+      <div class="context-item" data-tool="sink">🕳️ 粒子汇</div>
+      <div class="context-separator"></div>
+      <div class="context-item" data-tool="eraser">🧹 橡皮擦</div>
+      <div class="context-item" id="clearAll">🗑️ 清除全部</div>
+    </div>
+
+    <div id="recordingIndicator" class="recording-indicator" style="display: none;">
+      <span class="rec-dot"></span> 录制中...
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
