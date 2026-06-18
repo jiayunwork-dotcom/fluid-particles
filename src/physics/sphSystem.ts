@@ -198,8 +198,21 @@ export class SPHSystem {
   update(dt: number): void {
     if (this.isPaused) return;
     
-    const clampedDt = Math.min(dt, this.simParams.dt * 3);
-    const substeps = Math.min(Math.ceil(clampedDt / this.simParams.dt), 2);
+    const particleCount = this.particles.length;
+    let maxSubsteps = 2;
+    let effectiveDt = this.simParams.dt;
+    
+    if (particleCount > 6000) {
+      maxSubsteps = 1;
+      effectiveDt = this.simParams.dt * 1.5;
+    }
+    if (particleCount > 8500) {
+      maxSubsteps = 1;
+      effectiveDt = this.simParams.dt * 2;
+    }
+    
+    const clampedDt = Math.min(dt, effectiveDt * 3);
+    const substeps = Math.min(Math.ceil(clampedDt / effectiveDt), maxSubsteps);
     const stepDt = clampedDt / substeps;
     
     for (let i = 0; i < substeps; i++) {
@@ -316,7 +329,8 @@ export class SPHSystem {
       this.applyForceFieldsFast();
     }
     
-    if (this.materialParams.surfaceTension > 0) {
+    const particleCount = this.particles.length;
+    if (this.materialParams.surfaceTension > 0 && particleCount <= 6000) {
       this.applySurfaceTensionFast();
     }
   }

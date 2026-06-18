@@ -395,7 +395,7 @@ export class Renderer {
     gl.vertexAttribPointer(dPosLoc, 2, gl.FLOAT, false, 0, 0);
     
     gl.uniform2f(dResLoc, width, height);
-    gl.uniform1f(dRadiusLoc, this.particleSize * 1.5);
+    gl.uniform1f(dRadiusLoc, this.particleSize * 2.2);
     gl.uniform2f(dViewOffsetLoc, this.viewOffset.x, this.viewOffset.y);
     gl.uniform1f(dViewScaleLoc, this.viewScale);
     
@@ -404,10 +404,12 @@ export class Renderer {
     
     gl.drawArrays(gl.POINTS, 0, count);
     
-    this.blurTexture(this.textures.depth, this.textures.blurH, this.framebuffers.blurH, { x: 1, y: 0 });
-    this.blurTexture(this.textures.blurH, this.textures.blurV, this.framebuffers.blurV, { x: 0, y: 1 });
-    this.blurTexture(this.textures.blurV, this.textures.blurH, this.framebuffers.blurH, { x: 1, y: 0 });
-    this.blurTexture(this.textures.blurH, this.textures.blurV, this.framebuffers.blurV, { x: 0, y: 1 });
+    this.blurTexture(this.textures.depth, this.textures.blurH, this.framebuffers.blurH, { x: 2, y: 0 });
+    this.blurTexture(this.textures.blurH, this.textures.blurV, this.framebuffers.blurV, { x: 0, y: 2 });
+    this.blurTexture(this.textures.blurV, this.textures.blurH, this.framebuffers.blurH, { x: 2, y: 0 });
+    this.blurTexture(this.textures.blurH, this.textures.blurV, this.framebuffers.blurV, { x: 0, y: 2 });
+    this.blurTexture(this.textures.blurV, this.textures.blurH, this.framebuffers.blurH, { x: 2, y: 0 });
+    this.blurTexture(this.textures.blurH, this.textures.blurV, this.framebuffers.blurV, { x: 0, y: 2 });
     
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers.normal);
     gl.viewport(0, 0, width, height);
@@ -464,10 +466,10 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, this.textures.normal);
     gl.uniform1i(sNormalLoc, 0);
     
-    gl.uniform3f(sLightLoc, 0.3, 0.5, 1.0);
-    gl.uniform3f(sBaseColorLoc, 0.2, 0.5, 0.9);
-    gl.uniform3f(sEnvColorLoc, 0.6, 0.8, 1.0);
-    gl.uniform1f(sFresnelLoc, 3.0);
+    gl.uniform3f(sLightLoc, 0.4, 0.6, 0.9);
+    gl.uniform3f(sBaseColorLoc, 0.15, 0.45, 0.85);
+    gl.uniform3f(sEnvColorLoc, 0.8, 0.9, 1.0);
+    gl.uniform1f(sFresnelLoc, 2.5);
     
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
