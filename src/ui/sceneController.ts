@@ -240,7 +240,7 @@ export class SceneController {
     }
   }
 
-  private saveToStorage(): void {
+  private saveToStorage(): boolean {
     try {
       const userScenes = this.scenes.filter(s => !this.isBuiltinScene(s.id));
       const data = {
@@ -248,8 +248,10 @@ export class SceneController {
         scenes: userScenes
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      return true;
     } catch (e) {
       console.error('Failed to save scenes to storage:', e);
+      return false;
     }
   }
 
@@ -288,6 +290,8 @@ export class SceneController {
       this.scenes = this.scenes.filter(s => s.id !== oldest.id);
     }
 
+    const thumbnail = this.renderer.captureThumbnail();
+
     const scene: SceneData = {
       id: generateId(),
       name,
@@ -305,11 +309,18 @@ export class SceneController {
       particleSize: this.renderer.getParticleSize(),
       coloringMode: this.analysisController.getColoringMode(),
       colormapPresetName: this.getActiveColormapPresetName(),
-      colorStops: this.analysisController.getColorStops()
+      colorStops: this.analysisController.getColorStops(),
+      thumbnail: thumbnail ?? undefined
     };
 
+    const prevScenes = [...this.scenes];
     this.scenes.push(scene);
-    this.saveToStorage();
+    const saved = this.saveToStorage();
+    if (!saved) {
+      this.scenes = prevScenes;
+      alert('存储空间不足,请删除部分场景后重试');
+      return null;
+    }
     this.onSceneListChange?.();
     return scene;
   }
@@ -483,16 +494,23 @@ export class SceneController {
     URL.revokeObjectURL(url);
   }
 
-  importScenes(file: File): Promise<number> {
+  importScenes(file: File): Promise<{ imported: number; skippedLarge: number }> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
           const data = JSON.parse(e.target?.result as string);
           let imported = 0;
+          let skippedLarge = 0;
+          const MAX_THUMBNAIL_BYTES = 200 * 1024;
 
           if (data && Array.isArray(data.scenes)) {
             for (const scene of data.scenes) {
+              if (scene.thumbnail && scene.thumbnail.length > MAX_THUMBNAIL_BYTES) {
+                skippedLarge++;
+                continue;
+              }
+
               const exists = this.scenes.some(s => s.name === scene.name);
               if (!exists && !this.isBuiltinScene(scene.id)) {
                 const userScenes = this.scenes.filter(s => !this.isBuiltinScene(s.id));
@@ -508,7 +526,7 @@ export class SceneController {
 
           this.saveToStorage();
           this.onSceneListChange?.();
-          resolve(imported);
+          resolve({ imported, skippedLarge });
         } catch (err) {
           reject(err);
         }

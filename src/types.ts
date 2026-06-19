@@ -176,6 +176,7 @@ export interface SceneData {
   coloringMode: ColoringMode;
   colormapPresetName: string;
   colorStops: ColorStop[];
+  thumbnail?: string;
 }
 
 export interface SceneList {

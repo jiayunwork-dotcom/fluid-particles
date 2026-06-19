@@ -1146,8 +1146,14 @@ export class UIController {
         const file = (e.target as HTMLInputElement).files?.[0];
         if (file) {
           try {
-            const imported = await this.sceneController.importScenes(file);
-            alert(`成功导入 ${imported} 个场景${imported > 0 ? '' : '（重名场景已跳过）'}`);
+            const result = await this.sceneController.importScenes(file);
+            let msg = `成功导入 ${result.imported} 个场景`;
+            if (result.skippedLarge > 0) {
+              msg += `，有 ${result.skippedLarge} 个场景因缩略图体积过大被跳过`;
+            } else if (result.imported === 0) {
+              msg += '（重名场景已跳过）';
+            }
+            alert(msg);
           } catch (err) {
             console.error('Failed to import scenes:', err);
             alert('导入失败：无效的场景文件');
@@ -1185,6 +1191,24 @@ export class UIController {
       card.className = `scene-card${isBuiltin ? ' builtin' : ''}`;
       card.dataset.sceneId = scene.id;
       card.title = `点击加载场景: ${scene.name}`;
+
+      const thumb = document.createElement('div');
+      thumb.className = 'scene-thumb';
+
+      if (scene.thumbnail) {
+        const img = document.createElement('img');
+        img.className = 'scene-thumb-img';
+        img.src = scene.thumbnail;
+        img.alt = scene.name;
+        thumb.appendChild(img);
+      } else {
+        const placeholder = document.createElement('div');
+        placeholder.className = `scene-thumb-placeholder${isBuiltin ? ' builtin' : ''}`;
+        placeholder.textContent = scene.name.charAt(0);
+        thumb.appendChild(placeholder);
+      }
+
+      card.appendChild(thumb);
 
       const info = document.createElement('div');
       info.className = 'scene-card-info';

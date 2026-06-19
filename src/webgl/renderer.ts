@@ -1335,4 +1335,48 @@ export class Renderer {
     
     return new ImageData(dstData, dstWidth, dstHeight);
   }
+
+  captureThumbnail(): string | null {
+    try {
+      const gl = this.gl;
+      const srcWidth = this.canvas.width;
+      const srcHeight = this.canvas.height;
+      const dstWidth = 120;
+      const dstHeight = 80;
+
+      const srcPixels = new Uint8Array(srcWidth * srcHeight * 4);
+      gl.readPixels(0, 0, srcWidth, srcHeight, gl.RGBA, gl.UNSIGNED_BYTE, srcPixels);
+
+      const offscreen = document.createElement('canvas');
+      offscreen.width = dstWidth;
+      offscreen.height = dstHeight;
+      const ctx = offscreen.getContext('2d');
+      if (!ctx) return null;
+
+      const imgData = ctx.createImageData(dstWidth, dstHeight);
+      const dstData = imgData.data;
+      const sx = srcWidth / dstWidth;
+      const sy = srcHeight / dstHeight;
+
+      for (let y = 0; y < dstHeight; y++) {
+        const dstY = dstHeight - 1 - y;
+        const srcY = Math.floor(y * sy);
+        for (let x = 0; x < dstWidth; x++) {
+          const srcX = Math.floor(x * sx);
+          const srcIdx = (srcY * srcWidth + srcX) * 4;
+          const dstIdx = (dstY * dstWidth + x) * 4;
+          dstData[dstIdx] = srcPixels[srcIdx];
+          dstData[dstIdx + 1] = srcPixels[srcIdx + 1];
+          dstData[dstIdx + 2] = srcPixels[srcIdx + 2];
+          dstData[dstIdx + 3] = 255;
+        }
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+      return offscreen.toDataURL('image/jpeg', 0.6);
+    } catch (e) {
+      console.error('Failed to capture thumbnail:', e);
+      return null;
+    }
+  }
 }
