@@ -48,7 +48,7 @@ export class SceneController {
     const centerX = bounds.min.x + width / 2;
     const centerY = bounds.min.y + height / 2;
 
-    const waterfall = this.createWaterfallScene(centerX, centerY, width, height, bounds.min.y);
+    const waterfall = this.createWaterfallScene(centerX, centerY, width, height, bounds.min.y, bounds.max.y);
     const vortex = this.createVortexScene(centerX, centerY, width, height);
     const hourglass = this.createHourglassScene(centerX, centerY, width, height);
 
@@ -59,12 +59,12 @@ export class SceneController {
     this.scenes.push(waterfall, vortex, hourglass);
   }
 
-  private createWaterfallScene(centerX: number, centerY: number, width: number, height: number, minY: number): SceneData {
+  private createWaterfallScene(centerX: number, centerY: number, width: number, height: number, minY: number, maxY: number): SceneData {
     const emitter: Emitter = {
       id: generateId(),
-      position: vec2(centerX, minY + 100),
+      position: vec2(centerX, maxY - 50),
       rate: 60,
-      velocity: vec2(0, 500),
+      velocity: vec2(0, -500),
       lastEmit: 0
     };
 
@@ -80,7 +80,7 @@ export class SceneController {
     const repelField: ForceField = {
       id: repelId,
       type: 'repel',
-      position: vec2(centerX, height - 80),
+      position: vec2(centerX, minY + 80),
       strength: 8000,
       radius: 150
     };
