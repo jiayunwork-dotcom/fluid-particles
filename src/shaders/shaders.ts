@@ -40,6 +40,7 @@ export const particleSpriteFS = `
   uniform bool u_motionBlur;
   uniform sampler2D u_colormap;
   uniform bool u_useColormap;
+  uniform vec4 u_overrideColor;
   
   vec3 velocityToColor(float speed, float maxSpeed) {
     float t = clamp(speed / maxSpeed, 0.0, 1.0);
@@ -67,7 +68,9 @@ export const particleSpriteFS = `
     float alpha = 1.0 - smoothstep(0.3, 0.5, dist);
     
     vec3 color;
-    if (u_useColormap) {
+    if (u_overrideColor.a > 0.0) {
+      color = u_overrideColor.rgb;
+    } else if (u_useColormap) {
       float t = clamp(v_colorValue, 0.0, 1.0);
       color = texture2D(u_colormap, vec2(t, 0.5)).rgb;
     } else {
@@ -77,7 +80,8 @@ export const particleSpriteFS = `
     float glow = exp(-dist * 4.0) * 0.5;
     color += glow * color;
     
-    gl_FragColor = vec4(color, alpha * u_alpha);
+    float finalAlpha = u_overrideColor.a > 0.0 ? u_overrideColor.a : alpha * u_alpha;
+    gl_FragColor = vec4(color, finalAlpha);
   }
 `;
 

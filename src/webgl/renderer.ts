@@ -60,6 +60,11 @@ export class Renderer {
   
   private analysisRegions: AnalysisRegion[] = [];
   
+  private selectedParticleIndices: number[] = [];
+  private selectedParticlePositionData: Float32Array = new Float32Array(0);
+  private selectedParticlePositionBuffer: WebGLBuffer | null = null;
+  private readonly MAX_SELECTED_PARTICLES: number = 200;
+  
   private quadPositions: Float32Array;
   private quadTexCoords: Float32Array;
   
@@ -137,6 +142,9 @@ export class Renderer {
     this.lineColorData = new Float32Array(this.maxLines * 2 * 4);
     this.lineVertexBuffer = createBuffer(gl, this.lineVertexData, gl.DYNAMIC_DRAW);
     this.lineColorBuffer = createBuffer(gl, this.lineColorData, gl.DYNAMIC_DRAW);
+    
+    this.selectedParticlePositionData = new Float32Array(this.MAX_SELECTED_PARTICLES * 2);
+    this.selectedParticlePositionBuffer = createBuffer(gl, this.selectedParticlePositionData, gl.DYNAMIC_DRAW);
     
     const lineProg = this.programs.line;
     gl.useProgram(lineProg);
@@ -322,6 +330,14 @@ export class Renderer {
     this.analysisRegions = regions;
   }
 
+  setSelectedParticleIndices(indices: number[]): void {
+    this.selectedParticleIndices = indices.slice(0, this.MAX_SELECTED_PARTICLES);
+  }
+
+  getSelectedParticleIndices(): number[] {
+    return [...this.selectedParticleIndices];
+  }
+
   setView(offset: Vec2, scale: number): void {
     this.viewOffset = offset;
     this.viewScale = scale;
@@ -493,6 +509,11 @@ export class Renderer {
     const viewScaleLoc = gl.getUniformLocation(program, 'u_viewScale');
     const colormapLoc = gl.getUniformLocation(program, 'u_colormap');
     const useColormapLoc = gl.getUniformLocation(program, 'u_useColormap');
+    const overrideColorLoc = gl.getUniformLocation(program, 'u_overrideColor');
+    
+    if (this.selectedParticleIndices.length > 0) {
+      this.renderSelectedParticleRings(posLoc, resLoc, sizeLoc, maxSpeedLoc, alphaLoc, motionBlurLoc, viewOffsetLoc, viewScaleLoc, overrideColorLoc);
+    }
     
     gl.bindBuffer(gl.ARRAY_BUFFER, this.particlePositionBuffer);
     gl.enableVertexAttribArray(posLoc);
@@ -518,6 +539,7 @@ export class Renderer {
     gl.uniform2f(viewOffsetLoc, this.viewOffset.x, this.viewOffset.y);
     gl.uniform1f(viewScaleLoc, this.viewScale);
     gl.uniform1i(useColormapLoc, this.useColormap ? 1 : 0);
+    gl.uniform4f(overrideColorLoc, 0, 0, 0, 0);
     
     if (this.useColormap && this.colormapTexture) {
       gl.activeTexture(gl.TEXTURE0);
@@ -533,6 +555,54 @@ export class Renderer {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     
     this.renderAnalysisRegions();
+  }
+
+  private renderSelectedParticleRings(
+    posLoc: number,
+    resLoc: WebGLUniformLocation | null,
+    sizeLoc: WebGLUniformLocation | null,
+    maxSpeedLoc: WebGLUniformLocation | null,
+    alphaLoc: WebGLUniformLocation | null,
+    motionBlurLoc: WebGLUniformLocation | null,
+    viewOffsetLoc: WebGLUniformLocation | null,
+    viewScaleLoc: WebGLUniformLocation | null,
+    overrideColorLoc: WebGLUniformLocation | null
+  ): void {
+    const gl = this.gl;
+    const selectedCount = this.selectedParticleIndices.length;
+    if (selectedCount === 0) return;
+    
+    const selPosData = this.selectedParticlePositionData;
+    const posData = this.particlePositionData;
+    
+    for (let i = 0; i < selectedCount; i++) {
+      const idx = this.selectedParticleIndices[i];
+      if (idx >= 0 && idx * 2 + 1 < posData.length) {
+        selPosData[i * 2] = posData[idx * 2];
+        selPosData[i * 2 + 1] = posData[idx * 2 + 1];
+      }
+    }
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.selectedParticlePositionBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, selPosData.subarray(0, selectedCount * 2));
+    gl.enableVertexAttribArray(posLoc);
+    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+    
+    gl.uniform2f(resLoc, this.canvas.width, this.canvas.height);
+    gl.uniform1f(sizeLoc, this.particleSize + 2);
+    gl.uniform1f(maxSpeedLoc, this.maxSpeed);
+    gl.uniform1f(alphaLoc, 1.0);
+    gl.uniform1i(motionBlurLoc, 0);
+    gl.uniform2f(viewOffsetLoc, this.viewOffset.x, this.viewOffset.y);
+    gl.uniform1f(viewScaleLoc, this.viewScale);
+    gl.uniform4f(overrideColorLoc, 1.0, 1.0, 0.0, 1.0);
+    
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+    
+    gl.drawArrays(gl.POINTS, 0, selectedCount);
+    
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   }
 
   private renderFluid(): void {

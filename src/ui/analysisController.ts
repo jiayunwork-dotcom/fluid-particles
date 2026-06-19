@@ -34,6 +34,22 @@ export class AnalysisController {
   private histogramData: HistogramData | null = null;
   private readonly HISTOGRAM_BINS: number = 20;
 
+  private selectedParticleIndices: number[] = [];
+  private readonly MAX_SELECTED_PARTICLES: number = 200;
+  private isBoxSelecting: boolean = false;
+  private boxSelectStart: Vec2 | null = null;
+  private boxSelectEnd: Vec2 | null = null;
+
+  private velocityTrendCanvas: HTMLCanvasElement | null = null;
+  private velocityTrendCtx: CanvasRenderingContext2D | null = null;
+  private velocityTrendData: number[] = [];
+  private readonly TREND_MAX_POINTS: number = 50;
+  private readonly TREND_SAMPLE_INTERVAL: number = 200;
+  private trendSampleTimer: number = 0;
+
+  private readonly TRACKING_STATS_INTERVAL: number = 1000;
+  private trackingStatsTimer: number = 0;
+
   private gradientBar: HTMLDivElement | null = null;
   private stopHandles: HTMLDivElement[] = [];
   private dragState: DragState = { isDragging: false, stopIndex: -1, startX: 0 };
@@ -184,6 +200,8 @@ export class AnalysisController {
     this.setupSavePreset();
     this.setupRegionTool();
     this.setupHistogram();
+    this.setupParticleTracking();
+    this.setupCollapsibleSections();
     this.updateRegionList();
     this.computeHistogram();
   }
@@ -849,6 +867,317 @@ export class AnalysisController {
     if (stdEl) stdEl.textContent = format(this.histogramData.stdDev);
   }
 
+  private setupCollapsibleSections(): void {
+    const titles = document.querySelectorAll('.subsection-title.collapsible');
+    titles.forEach(title => {
+      const toggleId = title.getAttribute('data-toggle');
+      if (!toggleId) return;
+      const content = document.getElementById(toggleId);
+      if (!content) return;
+
+      title.addEventListener('click', () => {
+        title.classList.toggle('collapsed');
+        content.classList.toggle('collapsed');
+      });
+    });
+  }
+
+  private setupParticleTracking(): void {
+    const boxSelectBtn = document.getElementById('btnBoxSelect');
+    if (boxSelectBtn) {
+      boxSelectBtn.addEventListener('click', () => {
+        this.enableBoxSelection();
+      });
+    }
+
+    const clearBtn = document.getElementById('btnClearSelection');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        this.clearSelection();
+      });
+    }
+
+    this.velocityTrendCanvas = document.getElementById('velocityTrendCanvas') as HTMLCanvasElement;
+    if (this.velocityTrendCanvas) {
+      this.velocityTrendCtx = this.velocityTrendCanvas.getContext('2d');
+    }
+
+    this.updateSelectedParticleCount();
+    this.drawVelocityTrend();
+  }
+
+  private enableBoxSelection(): void {
+    this.canvas.style.cursor = 'crosshair';
+
+    const onDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      this.isBoxSelecting = true;
+      this.boxSelectStart = this.getCanvasPos(e);
+      this.boxSelectEnd = { ...this.boxSelectStart };
+      this.showParticleSelectBox();
+    };
+
+    const onMove = (e: MouseEvent) => {
+      if (!this.isBoxSelecting) return;
+      e.stopImmediatePropagation();
+      this.boxSelectEnd = this.getCanvasPos(e);
+      this.updateParticleSelectBox();
+    };
+
+    const onUp = (e: MouseEvent) => {
+      if (!this.isBoxSelecting) return;
+      e.stopImmediatePropagation();
+      this.isBoxSelecting = false;
+      this.hideParticleSelectBox();
+      this.canvas.style.cursor = 'default';
+
+      if (this.boxSelectStart && this.boxSelectEnd) {
+        this.performBoxSelection(this.boxSelectStart, this.boxSelectEnd);
+      }
+
+      this.boxSelectStart = null;
+      this.boxSelectEnd = null;
+      this.canvas.removeEventListener('mousedown', onDown);
+      this.canvas.removeEventListener('mousemove', onMove);
+      this.canvas.removeEventListener('mouseup', onUp);
+      this.canvas.removeEventListener('mouseleave', onUp);
+    };
+
+    this.canvas.addEventListener('mousedown', onDown);
+    this.canvas.addEventListener('mousemove', onMove);
+    this.canvas.addEventListener('mouseup', onUp);
+    this.canvas.addEventListener('mouseleave', onUp);
+  }
+
+  private clearSelection(): void {
+    this.selectedParticleIndices = [];
+    this.velocityTrendData = [];
+    this.renderer.setSelectedParticleIndices([]);
+    this.updateSelectedParticleCount();
+    this.drawVelocityTrend();
+    this.updateTrackingStatsDisplay(0, 20, 0);
+  }
+
+  private performBoxSelection(start: Vec2, end: Vec2): void {
+    const x1 = Math.min(start.x, end.x);
+    const y1 = Math.min(start.y, end.y);
+    const x2 = Math.max(start.x, end.x);
+    const y2 = Math.max(start.y, end.y);
+    const width = x2 - x1;
+    const height = y2 - y1;
+
+    if (width < 5 || height < 5) return;
+
+    const particles = this.sphSystem.getParticles();
+    const selected: number[] = [];
+
+    for (let i = 0; i < particles.length && selected.length < this.MAX_SELECTED_PARTICLES; i++) {
+      const p = particles[i];
+      if (p.position.x >= x1 && p.position.x <= x2 &&
+          p.position.y >= y1 && p.position.y <= y2) {
+        selected.push(i);
+      }
+    }
+
+    this.selectedParticleIndices = selected;
+    this.velocityTrendData = [];
+    this.renderer.setSelectedParticleIndices(selected);
+    this.updateSelectedParticleCount();
+    this.drawVelocityTrend();
+    this.computeTrackingStats();
+  }
+
+  private showParticleSelectBox(): void {
+    let box = document.getElementById('particleSelectBox');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'particleSelectBox';
+      box.className = 'selection-box particle-select';
+      document.body.appendChild(box);
+    }
+    box.style.display = 'block';
+  }
+
+  private updateParticleSelectBox(): void {
+    const box = document.getElementById('particleSelectBox');
+    if (!box || !this.boxSelectStart || !this.boxSelectEnd) return;
+
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+
+    const screenX1 = (this.boxSelectStart.x + this.viewOffset.x) * this.viewScale / dpr;
+    const screenY1 = (this.boxSelectStart.y + this.viewOffset.y) * this.viewScale / dpr;
+    const screenX2 = (this.boxSelectEnd.x + this.viewOffset.x) * this.viewScale / dpr;
+    const screenY2 = (this.boxSelectEnd.y + this.viewOffset.y) * this.viewScale / dpr;
+
+    const left = rect.left + Math.min(screenX1, screenX2);
+    const top = rect.top + Math.min(screenY1, screenY2);
+    const width = Math.abs(screenX2 - screenX1);
+    const height = Math.abs(screenY2 - screenY1);
+
+    box.style.left = `${left}px`;
+    box.style.top = `${top}px`;
+    box.style.width = `${width}px`;
+    box.style.height = `${height}px`;
+  }
+
+  private hideParticleSelectBox(): void {
+    const box = document.getElementById('particleSelectBox');
+    if (box) {
+      box.style.display = 'none';
+    }
+  }
+
+  private updateSelectedParticleCount(): void {
+    const countEl = document.getElementById('selectedParticleCount');
+    if (countEl) {
+      countEl.textContent = `${this.selectedParticleIndices.length} 个`;
+    }
+  }
+
+  private sampleVelocityTrend(): void {
+    if (this.selectedParticleIndices.length === 0) return;
+
+    const particles = this.sphSystem.getParticles();
+    let sumVel = 0;
+    let count = 0;
+
+    for (const idx of this.selectedParticleIndices) {
+      if (idx >= 0 && idx < particles.length) {
+        const p = particles[idx];
+        const speed = Math.sqrt(p.velocity.x * p.velocity.x + p.velocity.y * p.velocity.y);
+        sumVel += speed;
+        count++;
+      }
+    }
+
+    const avgVel = count > 0 ? sumVel / count : 0;
+    this.velocityTrendData.push(avgVel);
+
+    if (this.velocityTrendData.length > this.TREND_MAX_POINTS) {
+      this.velocityTrendData.shift();
+    }
+
+    this.drawVelocityTrend();
+  }
+
+  private getMiddleColor(): string {
+    if (this.colorStops.length === 0) return '#ffffff';
+    const sorted = [...this.colorStops].sort((a, b) => a.position - b.position);
+    const middle = this.interpolateColorAt(0.5);
+    return middle;
+  }
+
+  private drawVelocityTrend(): void {
+    if (!this.velocityTrendCanvas || !this.velocityTrendCtx) return;
+
+    const ctx = this.velocityTrendCtx;
+    const w = this.velocityTrendCanvas.width;
+    const h = this.velocityTrendCanvas.height;
+    const padding = { top: 8, right: 8, bottom: 8, left: 8 };
+    const chartW = w - padding.left - padding.right;
+    const chartH = h - padding.top - padding.bottom;
+
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.fillStyle = 'rgba(30, 30, 60, 0.8)';
+    ctx.fillRect(0, 0, w, h);
+
+    if (this.selectedParticleIndices.length === 0 || this.velocityTrendData.length === 0) {
+      ctx.fillStyle = '#7080a0';
+      ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('无数据', w / 2, h / 2);
+      return;
+    }
+
+    const data = this.velocityTrendData;
+    const minVal = Math.min(...data);
+    const maxVal = Math.max(...data);
+    const range = maxVal - minVal;
+    const invRange = range > 0.001 ? 1 / range : 0;
+
+    ctx.strokeStyle = 'rgba(100, 150, 255, 0.15)';
+    ctx.lineWidth = 1;
+    const midY = padding.top + chartH / 2;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, midY);
+    ctx.lineTo(padding.left + chartW, midY);
+    ctx.stroke();
+
+    const lineColor = this.getMiddleColor();
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+
+    const pointCount = data.length;
+    const maxPoints = this.TREND_MAX_POINTS;
+    const stepX = chartW / (maxPoints - 1);
+
+    for (let i = 0; i < pointCount; i++) {
+      const xOffset = (maxPoints - pointCount) * stepX;
+      const x = padding.left + xOffset + i * stepX;
+      const normalizedY = range > 0.001 ? (data[i] - minVal) * invRange : 0.5;
+      const y = padding.top + chartH - normalizedY * chartH;
+
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = lineColor;
+    ctx.font = '10px SF Mono, monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(maxVal.toFixed(1), padding.left + 2, padding.top);
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(minVal.toFixed(1), padding.left + 2, h - padding.bottom);
+  }
+
+  private computeTrackingStats(): void {
+    if (this.selectedParticleIndices.length === 0) {
+      this.updateTrackingStatsDisplay(0, 20, 0);
+      return;
+    }
+
+    const particles = this.sphSystem.getParticles();
+    let sumVel = 0, sumTemp = 0, sumDensity = 0;
+    let count = 0;
+
+    for (const idx of this.selectedParticleIndices) {
+      if (idx >= 0 && idx < particles.length) {
+        const p = particles[idx];
+        const speed = Math.sqrt(p.velocity.x * p.velocity.x + p.velocity.y * p.velocity.y);
+        sumVel += speed;
+        sumTemp += p.temperature;
+        sumDensity += p.density;
+        count++;
+      }
+    }
+
+    if (count > 0) {
+      this.updateTrackingStatsDisplay(sumVel / count, sumTemp / count, sumDensity / count);
+    }
+  }
+
+  private updateTrackingStatsDisplay(avgVel: number, avgTemp: number, avgDensity: number): void {
+    const velEl = document.getElementById('trackAvgVelocity');
+    const tempEl = document.getElementById('trackAvgTemperature');
+    const densEl = document.getElementById('trackAvgDensity');
+
+    if (velEl) velEl.textContent = avgVel.toFixed(2);
+    if (tempEl) tempEl.textContent = `${avgTemp.toFixed(2)}°`;
+    if (densEl) densEl.textContent = avgDensity.toFixed(0);
+  }
+
   update(dt: number): void {
     if (this.analysisRegions.length > 0) {
       this.updateRegionLabels();
@@ -860,6 +1189,18 @@ export class AnalysisController {
         this.computeRegionStats();
       }
       this.computeHistogram();
+    }
+
+    this.trendSampleTimer += dt * 1000;
+    if (this.trendSampleTimer >= this.TREND_SAMPLE_INTERVAL) {
+      this.trendSampleTimer = 0;
+      this.sampleVelocityTrend();
+    }
+
+    this.trackingStatsTimer += dt * 1000;
+    if (this.trackingStatsTimer >= this.TRACKING_STATS_INTERVAL) {
+      this.trackingStatsTimer = 0;
+      this.computeTrackingStats();
     }
   }
 

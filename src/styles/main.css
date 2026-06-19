@@ -636,3 +636,73 @@ html, body {
   white-space: nowrap;
   z-index: 51;
 }
+
+.subsection-title.collapsible {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+}
+
+.subsection-title.collapsible:hover {
+  color: #aaccff;
+}
+
+.collapse-icon {
+  display: inline-block;
+  font-size: 10px;
+  transition: transform 0.2s ease;
+}
+
+.subsection-title.collapsible.collapsed .collapse-icon {
+  transform: rotate(-90deg);
+}
+
+.collapsible-content {
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.collapsible-content.collapsed {
+  max-height: 0 !important;
+}
+
+#velocityTrendCanvas {
+  width: 180px;
+  height: 80px;
+  border-radius: 6px;
+  border: 1px solid rgba(100, 150, 255, 0.25);
+  display: block;
+  margin: 8px 0;
+}
+
+.tracking-stats {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  font-size: 11px;
+  color: #a0b0d0;
+}
+
+.tracking-stats div {
+  display: flex;
+  justify-content: space-between;
+}
+
+.tracking-stats span {
+  color: #7080a0;
+}
+
+.tracking-stats b {
+  color: #c0d8ff;
+  font-family: 'SF Mono', monospace;
+  font-weight: 500;
+}
+
+.selection-box.particle-select {
+  border: 2px dashed #ffdd00;
+  background: rgba(255, 221, 0, 0.1);
+  pointer-events: none;
+  z-index: 90;
+}

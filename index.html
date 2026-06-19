@@ -257,6 +257,28 @@
             <div><span>标准差:</span> <b id="histStdValue">0</b></div>
           </div>
         </div>
+
+        <div class="subsection">
+          <div class="subsection-title collapsible" data-toggle="particleTracking">
+            <span class="collapse-icon">▼</span> 粒子追踪
+          </div>
+          <div id="particleTracking" class="collapsible-content">
+            <div class="control-row buttons">
+              <button id="btnBoxSelect">⬛ 框选模式</button>
+              <button id="btnClearSelection">🗑 清除选择</button>
+            </div>
+            <div class="control-row">
+              <label>选中粒子</label>
+              <span id="selectedParticleCount">0 个</span>
+            </div>
+            <canvas id="velocityTrendCanvas" width="180" height="80"></canvas>
+            <div class="tracking-stats">
+              <div><span>平均速度:</span> <b id="trackAvgVelocity">0.00</b></div>
+              <div><span>平均温度:</span> <b id="trackAvgTemperature">0.00°</b></div>
+              <div><span>平均密度:</span> <b id="trackAvgDensity">0</b></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
