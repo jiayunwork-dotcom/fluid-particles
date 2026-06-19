@@ -54,6 +54,10 @@ export class Renderer {
   private colormapTexture: WebGLTexture | null = null;
   private colormapStops: ColorStop[] = [];
   
+  currentColorMin: number = 0;
+  currentColorMax: number = 0;
+  currentColorRange: number = 0;
+  
   private analysisRegions: AnalysisRegion[] = [];
   
   private quadPositions: Float32Array;
@@ -410,11 +414,23 @@ export class Renderer {
     }
     
     const range = maxVal - minVal;
-    const invRange = range > 0.0001 ? 1 / range : 1;
+    const EPSILON = 0.0001;
     
-    for (let i = 0; i < count; i++) {
-      colorValueData[i] = (values[i] - minVal) * invRange;
+    if (range > EPSILON) {
+      const invRange = 1 / range;
+      for (let i = 0; i < count; i++) {
+        colorValueData[i] = (values[i] - minVal) * invRange;
+      }
+    } else {
+      const neutralVal = 0.5;
+      for (let i = 0; i < count; i++) {
+        colorValueData[i] = neutralVal;
+      }
     }
+    // 保存min/max供外部调试使用
+    this.currentColorMin = minVal;
+    this.currentColorMax = maxVal;
+    this.currentColorRange = range;
     
     gl.bindBuffer(gl.ARRAY_BUFFER, this.particlePositionBuffer!);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, posData.subarray(0, count * 2));

@@ -37,6 +37,7 @@ export class AnalysisController {
   private gradientBar: HTMLDivElement | null = null;
   private stopHandles: HTMLDivElement[] = [];
   private dragState: DragState = { isDragging: false, stopIndex: -1, startX: 0 };
+  private justDragged: boolean = false;
   private activeColorPicker: HTMLInputElement | null = null;
   private activeStopIndex: number = -1;
 
@@ -136,6 +137,7 @@ export class AnalysisController {
   setColoringMode(mode: ColoringMode): void {
     this.coloringMode = mode;
     this.renderer.setColoringMode(mode);
+    this.computeHistogram();
   }
 
   getColoringMode(): ColoringMode {
@@ -183,6 +185,7 @@ export class AnalysisController {
     this.setupRegionTool();
     this.setupHistogram();
     this.updateRegionList();
+    this.computeHistogram();
   }
 
   private setupColoringModeButtons(): void {
@@ -201,16 +204,22 @@ export class AnalysisController {
 
   private setupGradientEditor(): void {
     this.gradientBar = document.getElementById('gradientBar') as HTMLDivElement;
-    if (!this.gradientBar) return;
+    const editor = document.getElementById('gradientBar')?.parentElement;
+    if (!this.gradientBar || !editor) return;
 
-    this.gradientBar.addEventListener('click', (e) => {
-      if (this.dragState.isDragging) return;
+    editor.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.classList.contains('color-stop-handle')) return;
+      if (this.justDragged) {
+        this.justDragged = false;
+        return;
+      }
       const rect = this.gradientBar!.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const position = Math.max(0, Math.min(1, x / rect.width));
       const color = this.interpolateColorAt(position);
       if (this.addColorStop(position, color)) {
-        this.updateStopHandles();
+        // addColorStop 内部已经调用了 updateStopHandles
       }
     });
 
@@ -331,6 +340,8 @@ export class AnalysisController {
   private onStopDragEnd(): void {
     this.dragState.isDragging = false;
     this.dragState.stopIndex = -1;
+    this.justDragged = true;
+    setTimeout(() => { this.justDragged = false; }, 50);
     document.removeEventListener('mousemove', this.onStopDrag.bind(this));
     document.removeEventListener('mouseup', this.onStopDragEnd.bind(this));
   }
