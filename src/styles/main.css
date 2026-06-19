@@ -454,16 +454,18 @@ html, body {
 
 .gradient-editor {
   position: relative;
-  height: 36px;
-  margin: 8px 0 6px 0;
+  height: 48px;
+  margin: 12px 0 10px 0;
+  padding-top: 12px;
   border-radius: 6px;
-  overflow: hidden;
   border: 1px solid rgba(100, 150, 255, 0.3);
+  box-sizing: content-box;
 }
 
 .gradient-bar {
   width: 100%;
-  height: 100%;
+  height: 36px;
+  border-radius: 5px;
   cursor: pointer;
 }
 
@@ -478,7 +480,7 @@ html, body {
 
 .color-stop-handle {
   position: absolute;
-  top: -4px;
+  top: 0;
   width: 14px;
   height: 14px;
   transform: translateX(-50%) rotate(45deg);
@@ -619,4 +621,18 @@ html, body {
   border-color: #66ddff;
   background: rgba(102, 221, 255, 0.08);
   border-style: dashed;
+}
+
+.analysis-region-label {
+  position: absolute;
+  background: rgba(255, 221, 0, 0.95);
+  color: #1a1a2e;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 10px;
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+  z-index: 51;
 }

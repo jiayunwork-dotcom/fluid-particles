@@ -50,7 +50,7 @@ export class Renderer {
   private particleBufferSize: number = 0;
   
   private coloringMode: ColoringMode = 'velocity';
-  private useColormap: boolean = false;
+  private useColormap: boolean = true;
   private colormapTexture: WebGLTexture | null = null;
   private colormapStops: ColorStop[] = [];
   
@@ -625,6 +625,8 @@ export class Renderer {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
+    
+    this.renderAnalysisRegions();
   }
 
   private blurTexture(

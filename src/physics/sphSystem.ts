@@ -271,7 +271,9 @@ export class SPHSystem {
         }
       }
 
-      pi.temperature = (pi.temperature + tempIncrease) * 0.995;
+      const AMBIENT_TEMP = 20;
+      pi.temperature = pi.temperature + tempIncrease;
+      pi.temperature = AMBIENT_TEMP + (pi.temperature - AMBIENT_TEMP) * 0.995;
       pi.temperature = Math.max(0, Math.min(100, pi.temperature));
     }
   }

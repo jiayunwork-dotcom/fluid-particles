@@ -60,6 +60,7 @@ export class AnalysisController {
   setView(offset: Vec2, scale: number): void {
     this.viewOffset = offset;
     this.viewScale = scale;
+    this.updateRegionLabels();
   }
 
   private initDefaultPresets(): void {
@@ -471,6 +472,8 @@ export class AnalysisController {
 
     const onDown = (e: MouseEvent) => {
       if (e.button !== 0) return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
       this.isDrawingRegion = true;
       this.regionStartPos = this.getCanvasPos(e);
       this.regionEndPos = { ...this.regionStartPos };
@@ -479,12 +482,14 @@ export class AnalysisController {
 
     const onMove = (e: MouseEvent) => {
       if (!this.isDrawingRegion) return;
+      e.stopImmediatePropagation();
       this.regionEndPos = this.getCanvasPos(e);
       this.updateTempRegionBox();
     };
 
     const onUp = (e: MouseEvent) => {
       if (!this.isDrawingRegion) return;
+      e.stopImmediatePropagation();
       this.isDrawingRegion = false;
       this.hideTempRegionBox();
       this.canvas.style.cursor = 'default';
@@ -508,6 +513,7 @@ export class AnalysisController {
           };
           this.analysisRegions.push(region);
           this.renderer.setAnalysisRegions(this.analysisRegions);
+          this.updateRegionLabels();
           this.updateRegionList();
           this.computeRegionStats();
         }
@@ -630,6 +636,7 @@ export class AnalysisController {
     this.analysisRegions = this.analysisRegions.filter(r => r.id !== id);
     this.regionStats.delete(id);
     this.renderer.setAnalysisRegions(this.analysisRegions);
+    this.updateRegionLabels();
     this.updateRegionList();
   }
 
@@ -637,7 +644,37 @@ export class AnalysisController {
     this.analysisRegions = [];
     this.regionStats.clear();
     this.renderer.setAnalysisRegions(this.analysisRegions);
+    this.updateRegionLabels();
     this.updateRegionList();
+  }
+
+  private updateRegionLabels(): void {
+    let overlay = document.getElementById('regionLabelOverlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'regionLabelOverlay';
+      overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:50;';
+      const parent = this.canvas.parentElement;
+      if (parent) parent.appendChild(overlay);
+      else document.body.appendChild(overlay);
+    }
+    overlay.innerHTML = '';
+    const canvasRect = this.canvas.getBoundingClientRect();
+    const overlayRect = overlay.getBoundingClientRect();
+    const offsetX = canvasRect.left - overlayRect.left;
+    const offsetY = canvasRect.top - overlayRect.top;
+    const dpr = window.devicePixelRatio || 1;
+
+    this.analysisRegions.forEach(region => {
+      const label = document.createElement('div');
+      label.className = 'analysis-region-label';
+      label.textContent = region.label;
+      const screenX = offsetX + (region.x + this.viewOffset.x) * this.viewScale / dpr;
+      const screenY = offsetY + (region.y + this.viewOffset.y) * this.viewScale / dpr;
+      label.style.left = `${Math.max(0, screenX)}px`;
+      label.style.top = `${Math.max(0, screenY - 22)}px`;
+      overlay.appendChild(label);
+    });
   }
 
   private computeRegionStats(): void {
@@ -802,6 +839,9 @@ export class AnalysisController {
   }
 
   update(dt: number): void {
+    if (this.analysisRegions.length > 0) {
+      this.updateRegionLabels();
+    }
     this.statsUpdateTimer += dt * 1000;
     if (this.statsUpdateTimer >= this.STATS_INTERVAL) {
       this.statsUpdateTimer = 0;
