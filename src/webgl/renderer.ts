@@ -257,6 +257,14 @@ export class Renderer {
     this.maxSpeed = speed;
   }
 
+  getRenderMode(): RenderMode {
+    return this.renderMode;
+  }
+
+  getParticleSize(): number {
+    return this.particleSize;
+  }
+
   setColoringMode(mode: ColoringMode): void {
     this.coloringMode = mode;
     this.useColormap = true;

@@ -157,3 +157,28 @@ export interface SelectionBox {
   endY: number;
   isSelecting: boolean;
 }
+
+export interface SceneData {
+  id: string;
+  name: string;
+  createdAt: number;
+  particleCount: number;
+  materialParams: MaterialParams;
+  simParams: {
+    boundaryRestitution: number;
+  };
+  forceFields: ForceField[];
+  obstacles: Obstacle[];
+  emitters: Emitter[];
+  sinks: Sink[];
+  renderMode: RenderMode;
+  particleSize: number;
+  coloringMode: ColoringMode;
+  colormapPresetName: string;
+  colorStops: ColorStop[];
+}
+
+export interface SceneList {
+  version: number;
+  scenes: SceneData[];
+}

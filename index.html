@@ -24,6 +24,28 @@
     </div>
 
     <div id="controlPanel" class="control-panel">
+      <div class="panel-section scene-section">
+        <div class="section-title collapsible">
+          <span id="sceneCollapseIcon" class="collapse-icon">▼</span> 场景
+        </div>
+        <div id="sceneSectionContent" class="collapsible-content">
+          <div id="sceneList" class="scene-list"></div>
+          <div id="saveSceneInputContainer" class="scene-input-container" style="display: none;">
+            <input type="text" id="sceneNameInput" class="scene-name-input" placeholder="输入场景名称" maxlength="20">
+            <button id="btnConfirmSaveScene" class="scene-small-btn">✓</button>
+            <button id="btnCancelSaveScene" class="scene-small-btn">✕</button>
+          </div>
+          <div class="control-row buttons" style="margin-top: 10px;">
+            <button id="btnSaveScene">💾 保存当前场景</button>
+          </div>
+          <div class="control-row buttons">
+            <button id="btnExportScenes">📤 导出全部场景</button>
+            <button id="btnImportScenes">📥 导入场景</button>
+          </div>
+          <input type="file" id="sceneFileInput" accept=".json" style="display: none;">
+        </div>
+      </div>
+
       <div class="panel-section">
         <div class="section-title">模拟控制</div>
         <div class="control-row">

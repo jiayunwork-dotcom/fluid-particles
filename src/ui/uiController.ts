@@ -8,6 +8,7 @@ import { vec2, vec2Add, vec2Sub, vec2Mul, vec2Div, vec2Normalize, vec2Length, ge
 import { encodeGif } from '../utils/gifEncoder';
 import { TrajectoryController } from './trajectoryController';
 import { AnalysisController } from './analysisController';
+import { SceneController } from './sceneController';
 
 export class UIController {
   private canvas: HTMLCanvasElement;
@@ -15,6 +16,7 @@ export class UIController {
   private renderer: Renderer;
   private trajectoryController: TrajectoryController;
   private analysisController: AnalysisController;
+  private sceneController: SceneController;
   
   private currentTool: ToolType = 'gravity';
   private isDrawing: boolean = false;
@@ -56,9 +58,11 @@ export class UIController {
     this.trajectoryController.setView(this.viewOffset, this.viewScale);
     this.analysisController = new AnalysisController(canvas, sphSystem, renderer);
     this.analysisController.setView(this.viewOffset, this.viewScale);
+    this.sceneController = new SceneController(sphSystem, renderer, this, this.analysisController);
     
     this.bindEvents();
     this.analysisController.setupUI();
+    this.setupSceneUI();
   }
 
   setOnParamsChange(callback: () => void): void {
@@ -1093,5 +1097,219 @@ export class UIController {
 
   getAnalysisController(): AnalysisController {
     return this.analysisController;
+  }
+
+  getSceneController(): SceneController {
+    return this.sceneController;
+  }
+
+  private setupSceneUI(): void {
+    this.sceneController.setOnSceneListChange(() => this.renderSceneList());
+    this.renderSceneList();
+
+    const saveBtn = document.getElementById('btnSaveScene');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => this.showSaveSceneInput());
+    }
+
+    const cancelBtn = document.getElementById('btnCancelSaveScene');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => this.hideSaveSceneInput());
+    }
+
+    const confirmBtn = document.getElementById('btnConfirmSaveScene');
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', () => this.confirmSaveScene());
+    }
+
+    const nameInput = document.getElementById('sceneNameInput') as HTMLInputElement;
+    if (nameInput) {
+      nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          this.confirmSaveScene();
+        } else if (e.key === 'Escape') {
+          this.hideSaveSceneInput();
+        }
+      });
+    }
+
+    const exportBtn = document.getElementById('btnExportScenes');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', () => this.sceneController.exportAllScenes());
+    }
+
+    const importBtn = document.getElementById('btnImportScenes');
+    const fileInput = document.getElementById('sceneFileInput') as HTMLInputElement;
+    if (importBtn && fileInput) {
+      importBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', async (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (file) {
+          try {
+            const imported = await this.sceneController.importScenes(file);
+            alert(`成功导入 ${imported} 个场景${imported > 0 ? '' : '（重名场景已跳过）'}`);
+          } catch (err) {
+            console.error('Failed to import scenes:', err);
+            alert('导入失败：无效的场景文件');
+          }
+        }
+        fileInput.value = '';
+      });
+    }
+
+    const sectionTitle = document.querySelector('.scene-section .section-title');
+    if (sectionTitle) {
+      sectionTitle.addEventListener('click', () => {
+        const content = document.getElementById('sceneSectionContent');
+        const icon = document.getElementById('sceneCollapseIcon');
+        if (content && icon) {
+          content.classList.toggle('collapsed');
+          icon.textContent = content.classList.contains('collapsed') ? '▶' : '▼';
+        }
+      });
+    }
+  }
+
+  private renderSceneList(): void {
+    const container = document.getElementById('sceneList');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    const scenes = this.sceneController.getAllScenes();
+
+    for (const scene of scenes) {
+      const isBuiltin = this.sceneController.isBuiltinScene(scene.id);
+
+      const card = document.createElement('div');
+      card.className = `scene-card${isBuiltin ? ' builtin' : ''}`;
+      card.dataset.sceneId = scene.id;
+      card.title = `点击加载场景: ${scene.name}`;
+
+      const info = document.createElement('div');
+      info.className = 'scene-card-info';
+
+      const name = document.createElement('div');
+      name.className = 'scene-card-name';
+      name.textContent = scene.name;
+      info.appendChild(name);
+
+      const meta = document.createElement('div');
+      meta.className = 'scene-card-meta';
+      meta.textContent = `${this.sceneController.formatDate(scene.createdAt)} · ${scene.particleCount} 粒子`;
+      info.appendChild(meta);
+
+      card.appendChild(info);
+
+      const actions = document.createElement('div');
+      actions.className = 'scene-card-actions';
+
+      if (!isBuiltin) {
+        const renameBtn = document.createElement('button');
+        renameBtn.className = 'scene-icon-btn';
+        renameBtn.title = '重命名';
+        renameBtn.innerHTML = '✏️';
+        renameBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.renameScene(scene.id);
+        });
+        actions.appendChild(renameBtn);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'scene-icon-btn';
+        deleteBtn.title = '删除';
+        deleteBtn.innerHTML = '🗑️';
+        deleteBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.deleteScene(scene.id);
+        });
+        actions.appendChild(deleteBtn);
+      } else {
+        const lockSpan = document.createElement('span');
+        lockSpan.className = 'scene-lock-icon';
+        lockSpan.title = '内置场景，不可修改';
+        lockSpan.textContent = '🔒';
+        actions.appendChild(lockSpan);
+      }
+
+      card.appendChild(actions);
+
+      card.addEventListener('click', () => {
+        const sceneName = this.sceneController.loadScene(scene.id);
+        if (sceneName) {
+          this.sceneController.showLoadedToast(sceneName);
+        }
+      });
+
+      container.appendChild(card);
+    }
+  }
+
+  private showSaveSceneInput(): void {
+    const inputContainer = document.getElementById('saveSceneInputContainer');
+    const nameInput = document.getElementById('sceneNameInput') as HTMLInputElement;
+    const saveBtn = document.getElementById('btnSaveScene');
+    if (inputContainer && nameInput && saveBtn) {
+      inputContainer.style.display = 'flex';
+      saveBtn.style.display = 'none';
+      nameInput.value = '';
+      setTimeout(() => nameInput.focus(), 10);
+    }
+  }
+
+  private hideSaveSceneInput(): void {
+    const inputContainer = document.getElementById('saveSceneInputContainer');
+    const saveBtn = document.getElementById('btnSaveScene');
+    if (inputContainer && saveBtn) {
+      inputContainer.style.display = 'none';
+      saveBtn.style.display = 'block';
+    }
+  }
+
+  private confirmSaveScene(): void {
+    const nameInput = document.getElementById('sceneNameInput') as HTMLInputElement;
+    if (!nameInput) return;
+
+    const name = nameInput.value.trim();
+    if (!name) {
+      alert('请输入场景名称');
+      return;
+    }
+
+    const existing = this.sceneController.getAllScenes().find(s => s.name === name);
+    if (existing) {
+      alert('场景名称已存在，请使用其他名称');
+      return;
+    }
+
+    this.sceneController.saveCurrentScene(name);
+    this.hideSaveSceneInput();
+  }
+
+  private renameScene(id: string): void {
+    const scenes = this.sceneController.getAllScenes();
+    const scene = scenes.find(s => s.id === id);
+    if (!scene) return;
+
+    const newName = prompt('请输入新的场景名称:', scene.name);
+    if (newName && newName.trim() && newName.trim() !== scene.name) {
+      const trimmedName = newName.trim();
+      const existing = scenes.find(s => s.name === trimmedName && s.id !== id);
+      if (existing) {
+        alert('场景名称已存在，请使用其他名称');
+        return;
+      }
+      this.sceneController.renameScene(id, trimmedName);
+    }
+  }
+
+  private deleteScene(id: string): void {
+    const scenes = this.sceneController.getAllScenes();
+    const scene = scenes.find(s => s.id === id);
+    if (!scene) return;
+
+    if (confirm(`确定要删除场景 "${scene.name}" 吗？`)) {
+      this.sceneController.deleteScene(id);
+    }
   }
 }
